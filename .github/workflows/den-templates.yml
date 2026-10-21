@@ -9,7 +9,7 @@ jobs:
       - env:
           T: ${{ matrix.entry }}
         name: gate
-        run: "# shellcheck disable=SC2016\nnix develop path:.?dir=dev -c bash -c 'bash ci/gate.sh . \"$(bash ci/den-src.sh)\" \"$T\" | tee /dev/stderr | { ! grep -q FAIL; }' "
+        run: nix develop path:.?dir=dev -c just gate "$T"
     strategy:
       fail-fast: false
       matrix:

@@ -7,18 +7,7 @@ jobs:
       - uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - env:
-          SHARD: ${{ matrix.shard }}
-        name: run shard on Den and dungeon
-        run: "# shellcheck disable=SC2016\nnix develop path:.?dir=dev -c bash -c '\n            set -u\n            den=$(bash ci/den-src.sh)\n            mapfile -t all < <(rg -oN --no-filename -r \"\\$1\" \"flake\\.tests\\.([A-Za-z0-9_-]+)\" \"$den\"/templates/ci/modules/deadbugs/*.nix | sort -u)\n            suites=(); for i in \"${!all[@]}\"; do [ $((i % 4)) -eq \"$SHARD\" ] && suites+=(\"${all[$i]}\"); done\n            bash ci/deadbugs.sh \"$den\" \"$den\" \"$RUNNER_TEMP/den.tsv\" \"${suites[@]}\"\n            bash ci/deadbugs.sh \"$den\" \"$PWD\" \"$RUNNER_TEMP/dungeon.tsv\" \"${suites[@]}\"\n            echo \"Den PASS: $(grep -c PASS \"$RUNNER_TEMP/den.tsv\")  dungeon PASS: $(grep -c PASS \"$RUNNER_TEMP/dungeon.tsv\")  of ${#suites[@]}\"\n            join -t \"$(printf \"\\t\")\" <(cut -f1,2 \"$RUNNER_TEMP/den.tsv\" | sort) <(cut -f1,2 \"$RUNNER_TEMP/dungeon.tsv\" | sort) \\\n              | awk -F\"\\t\" \"\\$2==\\\"PASS\\\" && \\$3!=\\\"PASS\\\" {print \\\"FAIL on dungeon: \\\" \\$1; bad=1} END {exit bad}\"\n          ' "
-    strategy:
-      fail-fast: false
-      matrix:
-        shard:
-          - 0
-          - 1
-          - 2
-          - 3
+      - run: nix develop path:.?dir=dev -c just deadbugs
 name: deadbugs
 "on":
   - push

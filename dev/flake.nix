@@ -6,12 +6,13 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
     files.url = "github:sini/files";
+    fastest.url = "github:denful/fastest";
   };
-  outputs = inputs@{ self, nixpkgs, flake-parts, files, ... }:
+  outputs = inputs@{ self, nixpkgs, flake-parts, files, fastest, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       imports = [ files.flakeModule ];
-      perSystem = { pkgs, lib, config, ... }: let
+      perSystem = { pkgs, lib, config, system, ... }: let
         registry = import ../registry.nix;
         status = builtins.fromJSON (builtins.readFile ../ci/status.json);
         gen = import ./generated.nix { inherit lib registry status; };
@@ -32,7 +33,7 @@
         };
         apps.drvPathDiff = { type = "app"; program = lib.getExe config.packages.drvPathDiff; };
         devShells.default = pkgs.mkShell {
-          packages = with pkgs; [ just nix-unit nixfmt gh jq ripgrep fd actionlint shellcheck config.packages.drvPathDiff ];
+          packages = with pkgs; [ just nix-unit nixfmt gh jq ripgrep fd actionlint shellcheck config.packages.drvPathDiff fastest.packages.${system}.fastest ];
         };
       };
     };

@@ -37,7 +37,7 @@ in
         steps = setup ++ [ {
           name = "gate";
           env.T = "\${{ matrix.entry }}";
-          run = "# shellcheck disable=SC2016\n" + inDev ''bash -c 'bash ci/gate.sh . "$(bash ci/den-src.sh)" "$T" | tee /dev/stderr | { ! grep -q FAIL; }' '';
+          run = inDev ''just gate "$T"'';
         } ];
       };
     };
@@ -48,23 +48,19 @@ in
       jobs.deadbugs = {
         runs-on = "ubuntu-latest";
         continue-on-error = true;
-        strategy = { fail-fast = false; matrix.shard = [ 0 1 2 3 ]; };
-        steps = setup ++ [ {
-          name = "run shard on Den and dungeon";
-          env.SHARD = "\${{ matrix.shard }}";
-          run = "# shellcheck disable=SC2016\n" + inDev ''bash -c '
-            set -u
-            den=$(bash ci/den-src.sh)
-            mapfile -t all < <(rg -oN --no-filename -r "\$1" "flake\.tests\.([A-Za-z0-9_-]+)" "$den"/templates/ci/modules/deadbugs/*.nix | sort -u)
-            suites=(); for i in "''${!all[@]}"; do [ $((i % 4)) -eq "$SHARD" ] && suites+=("''${all[$i]}"); done
-            bash ci/deadbugs.sh "$den" "$den" "$RUNNER_TEMP/den.tsv" "''${suites[@]}"
-            bash ci/deadbugs.sh "$den" "$PWD" "$RUNNER_TEMP/dungeon.tsv" "''${suites[@]}"
-            echo "Den PASS: $(grep -c PASS "$RUNNER_TEMP/den.tsv")  dungeon PASS: $(grep -c PASS "$RUNNER_TEMP/dungeon.tsv")  of ''${#suites[@]}"
-            join -t "$(printf "\t")" <(cut -f1,2 "$RUNNER_TEMP/den.tsv" | sort) <(cut -f1,2 "$RUNNER_TEMP/dungeon.tsv" | sort) \
-              | awk -F"\t" "\$2==\"PASS\" && \$3!=\"PASS\" {print \"FAIL on dungeon: \" \$1; bad=1} END {exit bad}"
-          ' '';
-        } ];
+        steps = setup ++ [ { run = inDev "just deadbugs"; } ];
       };
+    };
+    # label-gated: one job per Den complexity group (denful/den#736) + full templates/ci
+    ".github/workflows/den-ci.yml".yaml = {
+      name = "den-ci";
+      on = { pull_request.types = [ "opened" "synchronize" "reopened" "labeled" ]; workflow_dispatch = { }; };
+      jobs = lib.genAttrs [ "c1" "c2" "c3" "c4" "c5" "full" ] (g: {
+        "if" = "contains(github.event.pull_request.labels.*.name, 'den-ci:${g}') || github.event_name == 'workflow_dispatch'";
+        runs-on = "ubuntu-latest";
+        continue-on-error = true;
+        steps = setup ++ [ { run = inDev "just den-ci ${g}"; } ];
+      });
     };
   };
 }
