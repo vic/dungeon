@@ -5,12 +5,6 @@ dungeon: {
       inherit (dungeon) gen;
       t = dungeon.genLib.types;
       cat = category: builtins.mapAttrs (_: _: { inherit category; });
-      # schema.host.imports fns take the entity itself as `host` (tutorials/microvm.mdx extendHostSchema `{ host, ... }`).
-      # bound to the lazy `config` arg, not _module.args: Gen folds declarations before args exist.
-      selfArg = m:
-        if builtins.isFunction m && (builtins.functionArgs m) ? host then
-          { __functor = _: a: m (a // { host = a.config; }); __functionArgs = builtins.removeAttrs (builtins.functionArgs m) [ "host" ] // { config = false; }; }
-        else m;
       # quirk names are channel keys (quirks never depend on aspects: no cycle); output classes: guides/flake-outputs.mdx:25-36.
       cnf0Of = c: {
         keySemantics =
@@ -83,20 +77,20 @@ dungeon: {
       inherit mkAspects cnfOf cnf0Of;
       module =
         { lib, config, ... }:
+        let
+          instanceOf = kind: extraModules: dungeon.schema.lib.mkInstanceType { strict = kind.isStrict; inherit extraModules; } kind;
+        in
         {
           options.hosts = lib.mkOption {
             # system-level submodule so each host sees its parent key (class/intoAttr defaults, schema.mdx:139-171).
             type = t.lazyAttrsOf (t.submodule ({ name, ... }: let system = name; in {
               freeformType =
               t.lazyAttrsOf (
-                t.submodule (
-                  { name, ... }@hargs:
+                # den.schema.host is a gen-schema kind: its body and imports compose into every host; mkInstanceType adds
+                # `name`, `id_hash` and the open/strict instance mode (entities.mdx:183-192, reference/lib.mdx:238-242).
+                instanceOf config.schema.host [
+                  ({ name, ... }@hargs:
                   {
-                    # schema.host.imports (e.g. fleet addr/environment options) extend the entity.
-                    # open by default (entities.mdx:183-192); schema.host.isStrict closes it
-                    # strict: gen-schema's closed freeform refuses undeclared keys by name (reference/lib.mdx:238-242)
-                    imports = map selfArg config.schema.host.imports ++ [ (dungeon.schema.entity config.schema.host) (if config.schema.host.isStrict then gen.schema.mkStrictModule "host" else { freeformType = t.lazyAttrsOf t.raw; }) ];
-                    options.name = lib.mkOption { type = t.str; default = name; };
                     options.hostName = lib.mkOption { type = t.str; default = name; };
                     options.system = lib.mkOption { type = t.str; default = system; };
                     # schema.mdx:141 `"nixos"` or `"darwin"` based on system; :166-171 intoAttr by class.
@@ -104,24 +98,21 @@ dungeon: {
                     options.intoAttr = lib.mkOption { type = t.listOf t.str; default = [ "${hargs.config.class}Configurations" name ]; };
                     options.users = lib.mkOption {
                       type = t.lazyAttrsOf (
-                        t.submodule (
-                          { name, ... }:
+                        instanceOf config.schema.user [
+                          ({ name, ... }:
                           {
-                            freeformType = t.lazyAttrsOf t.raw;
-                            imports = config.schema.user.imports ++ [ (dungeon.schema.entity config.schema.user) ];
-                            options.name = lib.mkOption { type = t.str; default = name; };
                             options.userName = lib.mkOption { type = t.str; default = name; };
                             options.classes = lib.mkOption {
                               type = t.listOf t.str;
                               default = [ ];
                             };
-                          }
-                        )
+                          })
+                        ]
                       );
                       default = { };
                     };
-                  }
-                )
+                  })
+                ]
               );
             }));
             default = { };
@@ -136,30 +127,40 @@ dungeon: {
             default = { };
           };
           config.aspects.default = config.default;
-          # shortcut: raw, no semantics yet; later rungs type these.
-          options.schema = lib.mkOption {
-            type = t.lazyAttrsOf (
-              t.submodule {
-                freeformType = t.lazyAttrsOf t.raw;
-                options =
+          # den.schema.<kind> are gen-schema kinds (deferred module bodies); these keys are kind-level data, not instance config.
+          options.schema =
+            let
+              list = { default = [ ]; merge = acc: v: acc ++ v; identity = false; };
+              flag = { default = false; merge = acc: v: acc || v; };
+            in
+            gen.schema.mkSchemaOption {
+              specialArgs = { lib = dungeon.genLib; };
+              collections = {
+                includes = list;
+                excludes = list;
+                # read from the raw defs by `computed` below (a collection merge sees mkDefault wrappers unresolved)
+                classes = { default = [ ]; merge = acc: _: acc; identity = false; };
+                isStrict = flag;
+                isEntity = flag;
+                collisionPolicy = { default = null; merge = _: v: v; identity = false; };
+              };
+              # schema.user.classes: plain definitions concatenate and win over mkDefault ones (denTest fixture mkDefault [ "homeManager" ]).
+              # shortcut: only plain and mkDefault priorities, upgrade if a fleet uses mkForce here.
+              computed = _: defs: {
+                classes =
                   let
-                    rawList = lib.mkOption { type = t.listOf t.raw; default = [ ]; };
+                    vs = builtins.concatMap (d: if builtins.isAttrs d.value && d.value ? classes then [ d.value.classes ] else [ ]) defs;
+                    isOv = v: (v._type or null) == "override";
+                    plain = builtins.filter (v: !isOv v) vs;
                   in
-                  {
-                    imports = rawList;
-                    includes = rawList;
-                    excludes = rawList;
-                    classes = lib.mkOption { type = t.listOf t.str; default = [ ]; };
-                    isStrict = lib.mkOption { type = t.bool; default = false; };
-                    isEntity = lib.mkOption { type = t.bool; default = false; };
-                  };
-              }
-            );
-            default = { };
-          };
+                  if plain != [ ] then builtins.concatLists plain else builtins.concatMap (v: v.content) vs;
+              };
+            };
           # consumers read schema.host/user unconditionally
           config.schema.host = { };
           config.schema.user = { };
+          # `inherits = [ den.schema.conf ]` names it (custom-entity-kinds.mdx); its instance keys come from schema.entity
+          config.schema.conf = { };
           options.policies = lib.mkOption { type = t.lazyAttrsOf t.raw; default = { }; };
           # builtins are named atoms so schema.<kind>.excludes can reference them (reference/policies.mdx:293-297)
           config.policies = lib.genAttrs dungeon.builtinPolicies (n: { __builtin = n; });

@@ -14,25 +14,22 @@ dungeon: {
       default = a: builtins.elem (a.name or null) (map (b: if builtins.isAttrs b then b.name or null else null) (kind.includes or [ ]));
     };
   };
-  schema.lib =
-    let
-      t = dungeon.genLib.types;
-    in
+  # den.schema.<kind> values are minted gen-schema kinds (view.nix mkSchemaOption), so instances are gen-schema's.
+  schema.lib.mkInstanceType =
     {
-      mkInstanceType =
-        {
-          extraModules ? [ ],
-          strict ? true,
-          # shortcut: specialArgs accepted but ignored, wire when a consumer needs it.
-          specialArgs ? { },
-        }:
-        kind:
-        t.submodule (
-          {
-            # instance `name` defaults to its attr name (gen-schema lib/instance.nix options.name). shortcut: hand-rolled; swap to gen-schema mkInstanceType once den.schema kinds are minted gen-schema kinds.
-            imports = (kind.imports or [ ]) ++ extraModules ++ [ (dungeon.schema.entity kind) ({ name, ... }: { options.name = dungeon.genLib.mkOption { type = t.str; default = name; }; }) ];
-          }
-          // (if strict then { } else { freeformType = t.lazyAttrsOf t.raw; })
-        );
-    };
+      extraModules ? [ ],
+      strict ? true,
+      specialArgs ? { },
+    }:
+    kind0:
+    let
+      # a plain kind body (no gen-schema mark, e.g. `mkInstanceType { } { }`) is minted through dungeon's own schema option
+      name = kind0.kind or "instance";
+      kind = if kind0 ? __mint then kind0 else (dungeon.genLib.evalModules { modules = [ dungeon.view.module { schema.${name} = kind0; } ]; }).config.schema.${name};
+    in
+    dungeon.gen.schema.mkInstanceType {
+      inherit strict;
+      specialArgs = { lib = dungeon.genLib; } // specialArgs;
+      extraModules = [ (dungeon.schema.entity kind) ] ++ extraModules;
+    } kind;
 }
