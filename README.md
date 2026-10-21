@@ -118,7 +118,7 @@ just fmt
 
 - `ci.yml`: `nix flake check` (README.md and workflows match their sources).
 - `den-templates.yml`: one job per registry entry.
-- `tests.yml`: one job per category (deadbugs, c1..c4). All use `continue-on-error` (reporting mode) while dungeon is unstable; the pass counts feed the progress table.
+- `tests.yml`: one job per category (deadbugs, c1..c4). Failing tests do not fail a job. The `progress` job merges the tallies into `dev/status.json` and `README.md`, and fails if any category passes fewer tests than before.
 
 Dev tools live in the `dev/` sub-flake. The top-level flake has one input: `gen`.
 
