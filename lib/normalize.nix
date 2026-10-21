@@ -3,6 +3,15 @@ dungeon: {
   # policy record or functor-with-args; den.policies values are records from capture (entry.nix), so refs compare by name
   isPol = e: builtins.isAttrs e && ((e.__isPolicy or false) || (e ? __functor && e ? __functionArgs));
   inlineAttrs = e: builtins.isAttrs e && !(e ? key) && !dungeon.isPol e;
+  # registry path of `<a>/<b>/...`: the longest registered top-level prefix, then nested keys (anons nest their own inline includes)
+  aspectPath =
+    aspects: n:
+    let
+      s = builtins.filter builtins.isString (builtins.split "/" n);
+      l = builtins.length s;
+      go = i: if i == 0 then s else let h = builtins.concatStringsSep "/" (builtins.genList (builtins.elemAt s) i); in if aspects ? ${h} then [ h ] ++ builtins.genList (j: builtins.elemAt s (i + j)) (l - i) else go (i - 1);
+    in
+    go l;
   classifyInc = e: {
     policy = dungeon.isPol e;
     slot = if dungeon.isPol e then null else if builtins.isFunction e || dungeon.inlineAttrs e then "anon" else "ref";
@@ -51,6 +60,8 @@ dungeon: {
           a;
       inl = a: lib.imap0 (i: e: { inherit i e; inc = dungeon.classifyInc e; }) (if builtins.isAttrs a && builtins.isList (a.includes or null) then a.includes else [ ]);
       anon = n: i: "${n}/${toString i}";
+      # an inline element is walked through its `includes` only: its other keys are content, and may be cyclic (a let-bound `v` holding `v`)
+      inlOnly = e: { includes = e.includes or [ ]; };
       # configure-aspects.mdx:134-139: a fn taking no named args is a positional `ctx:` include; `{ class, aspect-chain }` is a static leaf
       positional = e: builtins.isFunction e && lib.functionArgs e == { };
       staticLeaf = e: builtins.isFunction e && (lib.functionArgs e) ? class && (lib.functionArgs e) ? aspect-chain;
@@ -73,15 +84,11 @@ dungeon: {
       });
       tree = if builtins.isAttrs raw then builtins.mapAttrs normAspect raw else raw;
       # Keys exist for every include slot (elements stay unforced: they may reference `den`, which would cycle).
+      anonVal = fixA: p: e: if positional e then { } else if staticLeaf e then leafAspect e else if builtins.isFunction e then bare e else if dungeon.inlineAttrs e then fixA p e else { };
       anonsAt =
-        n: a:
-        builtins.listToAttrs (
-          map (x: {
-            name = anon n x.i;
-            value = if positional x.e then { } else if staticLeaf x.e then leafAspect x.e else if builtins.isFunction x.e then bare x.e else if dungeon.inlineAttrs x.e then x.e else { };
-          }) (inl a)
-        )
-        // lib.foldl' (acc: k: acc // anonsAt k.p k.v) { } (if builtins.isAttrs a then kidList n a else [ ]);
+        fixA: n: a:
+        builtins.listToAttrs (map (x: { name = anon n x.i; value = anonVal fixA (anon n x.i) x.e; }) (inl a))
+        // lib.foldl' (acc: k: acc // anonsAt fixA k.p k.v) { } (if builtins.isAttrs a then kidList n a else [ ]);
       # Aspect policy delivering the `includes` a fn aspect/include returns (Den parity: fn results' includes are live).
       # declared quirks are always bound ([] when nothing is emitted), so a fn include needing only them is ready at any scope
       # shortcut: pipe-fed quirk values are not seen when deciding includes; upgrade when an include depends on a quirk value
@@ -131,21 +138,24 @@ dungeon: {
             map (x: if x.e ? __isPolicy then x.e else { fn = x.e; name = "${n}.when${toString x.i}"; }) (builtins.filter (x: x.inc.policy) (inl a));
         }
         // lib.foldl' (acc: x: acc // { ${anon n x.i} = [ (fnIncs (anon n x.i) x.e) ]; }) { } (builtins.filter (x: builtins.isFunction x.e && !staticLeaf x.e) (inl a))
+        // lib.foldl' (acc: x: acc // polsAt (anon n x.i) (inlOnly x.e)) { } (builtins.filter (x: dungeon.inlineAttrs x.e) (inl a))
         // lib.foldl' (acc: k: acc // polsAt k.p k.v) { } (kidList n a);
     in
     {
       inherit tree;
-      anons = lib.concatMapAttrs anonsAt tree;
       polIncs = lib.concatMapAttrs polsAt (lib.filterAttrs (_: v: builtins.isAttrs v || builtins.isFunction v) (if builtins.isAttrs raw then raw else { }));
       # include slots become refs to the hoisted anons; `policies` is stripped (policy records live in the `policies` field)
       fixed =
         den:
         let
-          fix = n: a: a // { includes = map (x: if x.inc.slot == "anon" then (den.rawAspects or den.aspects).${anon n x.i} else if x.inc.slot == "ref" && builtins.isAttrs x.e then removeAttrs x.e [ "__functor" ] else x.e) (builtins.filter (x: x.inc.slot != null) (inl a)); };
+          reg = den.rawAspects or den.aspects;
+          fix = n: a: a // { includes = map (x: if x.inc.slot == "anon" then lib.getAttrFromPath (dungeon.aspectPath reg (anon n x.i)) reg else if x.inc.slot == "ref" && builtins.isAttrs x.e then removeAttrs x.e [ "__functor" ] else x.e) (builtins.filter (x: x.inc.slot != null) (inl a)); };
           fixTree = n: a: if builtins.isAttrs a then mapKids fixTree n (if builtins.isList (a.includes or null) then fix n a else a) else a;
           strip = a: if builtins.isAttrs a then removeAttrs a [ "policies" ] else a;
+          # an inline element's own inline includes are its nested keys `<i>` (registry `<anon>/<i>`, resolved by aspectPath)
+          fixA = p: e: strip (fixTree p e) // builtins.listToAttrs (map (x: { name = toString x.i; value = anonVal fixA (anon p x.i) x.e; }) (inl e));
         in
-        builtins.mapAttrs (n: a: strip (fixTree n a)) tree;
+        builtins.mapAttrs (n: a: strip (fixTree n a)) tree // { __anons = lib.concatMapAttrs (anonsAt fixA) tree; };
       recs = lib.concatMapAttrs (n: a: lib.optionalAttrs (builtins.isAttrs a && builtins.isAttrs (a.policies or null)) { ${n} = builtins.mapAttrs (p: fn: { __isPolicy = true; inherit fn; name = "${n}.${p}"; }) a.policies; }) tree;
     };
 }

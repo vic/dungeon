@@ -26,7 +26,7 @@ dungeon: {
           # nested aspects (Den aspects.mdx:19; gen-aspects "A key with no entry is a nested aspect") are
           # addressed by name `<parent>/<key>`; resolved by path so the world's key set never forces aspect bodies.
           kids = e: builtins.filter (k: gen.aspects.keyCategory cnf k == null && builtins.isAttrs e.${k}) (builtins.attrNames e);
-          at = n: builtins.foldl' (e: s: e.${s} or { }) decl.aspects (if decl.aspects ? ${n} then [ n ] else builtins.filter builtins.isString (builtins.split "/" n));
+          at = n: builtins.foldl' (e: s: e.${s} or { }) decl.aspects (dungeon.aspectPath decl.aspects n);
           isRef = b: (at b.name).key or null == b.key;
           authored =
             name: e: k: _:

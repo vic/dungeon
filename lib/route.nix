@@ -10,7 +10,7 @@ dungeon: {
       cl = dungeon.closure aspects;
       flat = x: if builtins.isList x then builtins.concatMap flat x else [ x ];
       # nested/namespace aspects are named `<parent>/<key>/...` and live inside their parent (closure.nix `at`)
-      lookup = n: if aspects ? ${n} then aspects.${n} else builtins.foldl' (e: s: if builtins.isAttrs e && e ? ${s} then e.${s} else null) aspects (builtins.filter builtins.isString (builtins.split "/" n));
+      lookup = n: builtins.foldl' (e: s: if builtins.isAttrs e && e ? ${s} then e.${s} else null) aspects (dungeon.aspectPath aspects n);
       one = i: x:
         if !builtins.isAttrs x || dungeon.isPol x || x ? __builtin then [ ]
         else if x ? name then (let r = lookup x.name; in if r != null then cl r else if strict then throw "den: schema.${kind}.includes: unknown aspect `${x.name}`" else [ ])
@@ -141,7 +141,7 @@ dungeon: {
         args: pols:
         let
           eff = dungeon.firePols args pols;
-          declared = n: let r = builtins.foldl' (e: s: if builtins.isAttrs e && e ? ${s} then e.${s} else null) aspects (if aspects ? ${n} then [ n ] else builtins.filter builtins.isString (builtins.split "/" n)); in if r == null then throw "den: aspect ${n} not declared" else r;
+          declared = n: let r = builtins.foldl' (e: s: if builtins.isAttrs e && e ? ${s} then e.${s} else null) aspects (dungeon.aspectPath aspects n); in if r == null then throw "den: aspect ${n} not declared" else r;
           inc = x:
             if (x.e.__effect or null) != "include" then [ ]
             # parametric include `{ host }: { <class> = ...; }` binds the scope ctx (tutorials/microvm.mdx stage 1)

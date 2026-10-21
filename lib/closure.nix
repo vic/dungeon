@@ -10,7 +10,7 @@ dungeon: {
     let
       id = dungeon.aspectIdOf;
       # nested aspects are named `<parent>/<key>` and live inside their parent (view.nix); top-level names (incl. anons `n/i`) win.
-      at = n: if aspects ? ${n} then aspects.${n} else builtins.foldl' (e: s: e.${s}) aspects (builtins.filter builtins.isString (builtins.split "/" n));
+      at = n: builtins.foldl' (e: s: e.${s}) aspects (dungeon.aspectPath aspects n);
       kids = a: map (b: at b.name) a.includes;
       dfs =
         seen: a:

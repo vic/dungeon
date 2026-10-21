@@ -11,7 +11,7 @@ dungeon: {
       r = dungeon.route world.schema aspects host users;
       segs = n: builtins.filter builtins.isString (builtins.split "/" n);
       # nested aspects `<parent>/<key>` live inside their parent (closure.nix `at`)
-      at = n: if aspects ? ${n} then aspects.${n} else builtins.foldl' (e: s: e.${s}) aspects (segs n);
+      at = n: builtins.foldl' (e: s: e.${s}) aspects (dungeon.aspectPath aspects n);
       # host scope = route's activated host members (policy adds/excludes applied), not a second walk.
       hostScope = r.hostCl;
       rootId = if aspects ? ${host.name} then id aspects.${host.name} else null;
@@ -19,7 +19,7 @@ dungeon: {
       uniq = (builtins.foldl' (acc: a: if acc.seen ? ${id a} then acc else { seen = acc.seen // { ${id a} = true; }; out = acc.out ++ [ a ]; }) { seen = { }; out = [ ]; } members).out;
       # include elements are hoisted to registry key `<parent>/<i>` (normalize.nix anon); their authored name survives on the typed record
       isAnon = n: let s = segs n; in builtins.length s > 1 && builtins.match "[0-9]+" (dungeon.genLib.last s) != null;
-      typed = n: if cfg.aspects ? ${n} then cfg.aspects.${n} else builtins.foldl' (e: s: e.${s} or { }) cfg.aspects (segs n);
+      typed = n: builtins.foldl' (e: s: e.${s} or { }) cfg.aspects (dungeon.aspectPath cfg.aspects n);
       typedName = n: (typed n).name or n;
       # identity = fq name, ctx-stripped: parent identity + the authored name, which outranks the position; unnamed: key (`<anon>:<i>` for include elements)
       identityOf =

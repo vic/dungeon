@@ -29,7 +29,7 @@ let
       in
       {
         _file = d.file;
-        aspects = n.anons // lib.optionalAttrs (leaf == "aspects") fixed;
+        aspects = fixed.__anons // lib.optionalAttrs (leaf == "aspects") (removeAttrs fixed [ "__anons" ]);
         default = lib.optionalAttrs (leaf == "default") fixed.default;
         policyRecs = lib.optionalAttrs (leaf == "aspects") n.recs;
         rawFns = lib.optionalAttrs (leaf == "aspects") (lib.filterAttrs (_: builtins.isFunction) d.value);
