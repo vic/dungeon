@@ -14,7 +14,7 @@
       imports = [ files.flakeModule ];
       perSystem = { pkgs, lib, config, system, ... }: let
         registry = import ../registry.nix;
-        status = builtins.fromJSON (builtins.readFile ../ci/status.json);
+        status = builtins.fromJSON (builtins.readFile ./status.json);
         gen = import ./generated.nix { inherit lib registry status; };
       in {
         files.generateApp = true;
