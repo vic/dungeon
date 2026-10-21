@@ -4,7 +4,8 @@
 dungeon: {
   resolve =
     world: class: root:
-    if root.__entityKind or null == "host" then dungeon.resolveEntityModule world class root.ctx.host else
+    if root.__entityKind or null == "host" then dungeon.resolveEntityModule world class root.ctx.host
+    else if root.__entityKind or null == "user" then dungeon.resolveUserModule world class root else
     let
       lib = dungeon.genLib;
       ctx = root.__ctx or { };
@@ -63,4 +64,10 @@ dungeon: {
     let r = dungeon.route world.schema world.rawAspects h (builtins.attrNames (h.users or { })); in
     if world.quirks != { } then throw "den.lib.aspects.resolve: quirks unsupported for resolved entity `${h.name}`"
     else { imports = if h.class == class then r.modules else r.classModulesWith (a: dungeon.rawClassOf world class { inherit class; aspect-chain = [ { __entityKind = "host"; ctx.host = h; inherit (h) name; } ]; } a) class; };
+  # a user entity (static leaf chain head at user scope): the host scope content bound with that user's args, then the user's own closure
+  resolveUserModule =
+    world: class: root:
+    let h = root.ctx.host; u = root.ctx.user; r = dungeon.route world.schema world.rawAspects h (builtins.attrNames (h.users or { })); in
+    if world.quirks != { } then throw "den.lib.aspects.resolve: quirks unsupported for resolved entity `${u.name}`"
+    else { imports = r.userClassModulesWith (a: dungeon.rawClassOf world class (r.argsOf u.name // { inherit class; aspect-chain = [ root ]; }) a) u.name class; };
 }

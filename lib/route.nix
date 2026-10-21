@@ -243,6 +243,14 @@ dungeon: {
         in
         builtins.concatMap (of { inherit host; }) (defaultCl ++ hostCl)
         ++ builtins.concatMap (u: builtins.concatMap (of (argsOf u)) (builtins.filter (a: !builtins.elem a.name (names tuCl)) (userClosure u))) users;
+      # one user's bucket of `cls`: host scope content bound with that user's args (per-user fan, issue-644), then the user's own closure
+      userClassModulesWith =
+        raw: u: cls:
+        let
+          of = a: map (dungeon.content.classModule (argsOf u)) ((if a.content ? ${cls} then [ a.content.${cls} ] else [ ]) ++ raw a);
+          hostScope = defaultCl ++ hostCl;
+        in
+        builtins.concatMap of (hostScope ++ builtins.filter (a: !builtins.elem a.name (names hostScope)) (userClosure u));
       # instantiate effects of schema.host.includes policies (tutorials/terranix-demo.mdx:44-61)
       instantiates = builtins.filter (e: e.value ? class) (dungeon.effectsOf "instantiate" (dungeon.firePols (hostArgs mF) (schemaPols "host")));
     };

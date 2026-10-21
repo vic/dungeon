@@ -78,8 +78,10 @@ dungeon: {
       positional = e: builtins.isFunction e && lib.functionArgs e == { };
       staticLeaf = e: builtins.isFunction e && (lib.functionArgs e) ? class && (lib.functionArgs e) ? aspect-chain;
       # Static leaf content per class: a den-arg module (content.nix binds `host` via gen.bind.wrap), so `class` + `aspect-chain`
-      # are supplied where the class is resolved. Chain = [ entity aspect ] (head = the host entity, resolve.nix resolveEntityModule).
-      # shortcut: chain head is the host entity at every scope; upgrade when a leaf needs the user entity as head.
+      # are supplied where the class is resolved. Chain head = the scope's entity (resolve.nix): the user entity for a user-scope
+      # class (bound per user by route.nix argsOf), else the host entity.
+      # shortcut: user-scope classes are the builtin ones; a class added to schema.user.classes keeps the host head.
+      userScoped = [ "user" "homeManager" "hjem" "maid" ];
       leafOf =
         cls: chain: r:
         {
@@ -91,8 +93,9 @@ dungeon: {
           ) (r.includes or [ ]);
         };
       leafAspect = f: lib.genAttrs classes (cls: {
-        __functor = _: { host }: let chain = [ { __entityKind = "host"; ctx.host = host; inherit (host) name; } ]; in leafOf cls chain (f { class = cls; aspect-chain = chain; });
-        __functionArgs = { host = false; };
+        __functor = _: { host, user ? null }: let chain = [ (if user == null then { __entityKind = "host"; ctx.host = host; inherit (host) name; } else { __entityKind = "user"; ctx = { inherit host user; }; inherit (user) name; }) ]; in leafOf cls chain (f { class = cls; aspect-chain = chain; });
+        # `user` is advertised only where every consumer binds it: the module system would otherwise be asked for it
+        __functionArgs = { host = false; } // lib.optionalAttrs (builtins.elem cls userScoped) { user = false; };
       });
       tree = if builtins.isAttrs raw then builtins.mapAttrs normAspect raw else raw;
       # Keys exist for every include slot (elements stay unforced: they may reference `den`, which would cycle).
