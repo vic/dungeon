@@ -26,6 +26,8 @@ jobs:
           - fleet-demo
 name: den-templates
 "on":
-  - push
-  - pull_request
-  - workflow_dispatch
+  pull_request: {}
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}

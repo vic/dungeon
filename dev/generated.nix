@@ -22,7 +22,7 @@ in
     "README.md".text = readme;
     ".github/workflows/ci.yml".yaml = {
       name = "ci";
-      on = [ "push" "pull_request" ];
+      on = { push.branches = [ "main" ]; pull_request = { }; };
       jobs.generated = {
         runs-on = "ubuntu-latest";
         steps = setup ++ [ { name = "README.md and workflows are in sync (run `just write`)"; run = "nix flake check path:.?dir=dev"; } ];
@@ -31,7 +31,7 @@ in
     # one job per registry entry
     ".github/workflows/den-templates.yml".yaml = {
       name = "den-templates";
-      on = [ "push" "pull_request" "workflow_dispatch" ];
+      on = { push.branches = [ "main" ]; pull_request = { }; workflow_dispatch = { }; };
       jobs.entry = {
         runs-on = "ubuntu-latest";
         strategy = { fail-fast = false; matrix.entry = names; };
@@ -42,18 +42,16 @@ in
         } ];
       };
     };
-    # Den templates/ci categories, increasing complexity. Reporting mode: all may fail while dungeon is unstable.
+    # Den templates/ci categories, increasing complexity. Failing tests do not fail a category job; the progress job fails when any category passes fewer tests than dev/status.json.
     ".github/workflows/tests.yml".yaml = {
       name = "tests";
-      on = [ "push" "pull_request" "workflow_dispatch" ];
+      on = { push.branches = [ "main" ]; pull_request = { }; workflow_dispatch = { }; };
       # categories are independent jobs: they run in parallel
       jobs = lib.genAttrs categories (c: {
         runs-on = "ubuntu-latest";
-        continue-on-error = true;
         steps = setup ++ [
           {
             name = "test ${c}";
-            continue-on-error = true;
             run = inDev "just test ${c} | tee out.txt || true" + "\n" + "grep '^TALLY' out.txt > tally-${c}.txt";
           }
           {
@@ -66,14 +64,13 @@ in
         # collects every category tally into dev/status.json and README.md; main commits them back
         progress = {
           needs = categories;
-          "if" = "always()";
           runs-on = "ubuntu-latest";
           permissions.contents = "write";
           steps = setup ++ [
             { uses = "actions/download-artifact@v4"; "with".path = "tallies"; }
             { name = "merge tallies"; run = inDev "bash dev/merge-tally.sh tallies"; }
             { name = "regenerate README.md"; run = inDev "just write"; }
-            { name = "summary"; run = "jq -r '.tests | to_entries[] | \"| \\(.key) | \\(.value.pass)/\\(.value.total) |\"' dev/status.json >> \"$GITHUB_STEP_SUMMARY\""; }
+            { name = "summary"; "if" = "always()"; run = "jq -r '.tests | to_entries[] | \"| \\(.key) | \\(.value.pass)/\\(.value.total) |\"' dev/status.json >> \"$GITHUB_STEP_SUMMARY\""; }
             {
               name = "commit progress (main only)";
               "if" = "github.ref == 'refs/heads/main' && github.event_name == 'push'";

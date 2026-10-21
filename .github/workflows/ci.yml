@@ -10,5 +10,7 @@ jobs:
         run: nix flake check path:.?dir=dev
 name: ci
 "on":
-  - push
-  - pull_request
+  pull_request: {}
+  push:
+    branches:
+      - main
