@@ -1,5 +1,23 @@
 {
   "nodes": {
+    "fastest": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1779819723,
+        "narHash": "sha256-8+oqF8Mb/6X7IDkmr5bMP0FKudo8qu62PwKQk9kXeSU=",
+        "owner": "denful",
+        "repo": "fastest",
+        "rev": "36645f32c3ea3f77d029afca0e796ae1dc3889d8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "denful",
+        "repo": "fastest",
+        "type": "github"
+      }
+    },
     "files": {
       "locked": {
         "lastModified": 1780084175,
@@ -37,6 +55,22 @@
     },
     "nixpkgs": {
       "locked": {
+        "lastModified": 1779694939,
+        "narHash": "sha256-Ly4j75O8ICaSQx3uxPnwk2x7PMF0XQvn5r0c3yBA7FI=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "f9d8b65950353691ab56561e7c73d2e1063d810b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
         "lastModified": 1792502884,
         "narHash": "sha256-ij8QUxzTOHovLrNOxVRx+RAhGQFOMsJbji0veiatH5k=",
         "rev": "02c087f3fe673c9e317f206a627cb6b910336dbe",
@@ -50,9 +84,10 @@
     },
     "root": {
       "inputs": {
+        "fastest": "fastest",
         "files": "files",
         "flake-parts": "flake-parts",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs_2"
       }
     }
   },

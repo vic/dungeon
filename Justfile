@@ -17,11 +17,13 @@ gate-all:
 gate *entries:
     bash ci/gate.sh . "$(bash ci/den-src.sh ${DEN_SRC:-})" {{entries}} | tee /dev/stderr | { ! grep -q FAIL; }
 
-# Den's deadbugs suites on dungeon (optional suite names). Report only: Den passes 65/65.
-deadbugs *suites:
-    bash ci/deadbugs.sh "$(bash ci/den-src.sh ${DEN_SRC:-})" . /tmp/deadbugs.tsv {{suites}}
-    @cut -f1,2 /tmp/deadbugs.tsv
-    @echo "PASS: $(grep -c 'PASS' /tmp/deadbugs.tsv) / $(wc -l < /tmp/deadbugs.tsv)"
+# Den's deadbugs suites on dungeon via fastest; writes /tmp/deadbugs.tsv. Report only: Den passes 65/65.
+deadbugs:
+    just den-ci deadbugs /tmp/deadbugs.tsv
+
+# Den templates/ci group on dungeon: deadbugs|c1..c5|full. Den source: ci/den-rev (override: DEN_SRC=<dir|rev>)
+den-ci group="deadbugs" tsv="/dev/null":
+    bash ci/den-ci.sh "$(bash ci/den-src.sh ${DEN_SRC:-})" {{group}} {{tsv}}
 
 # regenerate README.md and .github/workflows/* (dev/generated.nix: registry.nix + ci/status.json)
 write:
