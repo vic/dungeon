@@ -15,7 +15,10 @@ dungeon: {
           // cat "channel" c.quirks;
       };
       # + unregistered class keys found in aspect values (unregistered.nix, derived from cnf0Of)
-      cnfOf = c: { keySemantics = (cnf0Of c).keySemantics // cat "class" (builtins.listToAttrs (map (name: { inherit name; value = null; }) c.unregistered)); };
+      # + the classes flake-scope policy.instantiate specs collect (reference/policies.mdx:162-172): a parametric aspect's
+      # class keys are not visible before it is applied, the spec names them. Fired with the empty flake ctx.
+      instClasses = c: map (e: e.value.class) (builtins.filter (e: e.value ? class && e.value ? intoAttr) (dungeon.effectsOf "instantiate" (dungeon.firePols { } (builtins.filter (p: p.__isPolicy or false) (c.schema.flake.includes or [ ])))));
+      cnfOf = c: { keySemantics = (cnf0Of c).keySemantics // cat "class" (builtins.listToAttrs (map (name: { inherit name; value = null; }) (c.unregistered ++ instClasses c))); };
       mkAspects =
         decl:
         let

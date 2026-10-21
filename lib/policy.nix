@@ -62,6 +62,7 @@ dungeon: {
             if builtins.elem kind [ "flake" "host" "user" ] then [ ] else map (e: { path = e.value.intoAttr; value = e.value.instantiate { modules = modulesOf e.value.class; }; }) (builtins.filter (e: custom e.value) (eff "instantiate"));
           on = n: (m.resolve "b:${n}").included;
           instantiated = map (e: e.value.name) (eff "instantiate");
+          instEffs = eff "instantiate";
           children = map (e: mk e.kind (ctx // e.bindings) excl (path ++ [ (key e) ])) (builtins.filter (e: e ? kind && !(builtins.elem (key e) path)) (eff "resolve"));
         };
       builtinNames = dungeon.builtinPolicies;
