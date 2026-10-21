@@ -79,7 +79,8 @@ dungeon: {
       exNames = xs: map (b: b.name) (builtins.filter (b: builtins.isAttrs b && b ? name && !(b.__isPolicy or false) && !(b ? __builtin)) xs);
       schemaEx = kind: exNames (sch.${kind}.excludes or [ ]);
       # instance-own excludes are as authoritative as the kind's (custom-entity-kinds.mdx:47-49)
-      hostEx = m: schemaEx "host" ++ exNames host.excludes ++ excludedAt (hostArgs m) (builtins.concatMap (a: a.policyIncs) hostBase ++ schemaPols "host");
+      # the host aspect's own excludes cover the whole host scope, schema-included aspects too (deadbugs schema-included-parametric-exclude)
+      hostEx = m: schemaEx "host" ++ exNames host.excludes ++ exNames ((aspects.${host.name} or { }).excludes or [ ]) ++ excludedAt (hostArgs m) (builtins.concatMap (a: a.policyIncs) hostBase ++ schemaPols "host");
       hostCl = act.members host.name;
       userScope = u: "${u}@${host.name}";
       allUsers = users ++ builtins.attrNames host.users;

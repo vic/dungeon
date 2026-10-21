@@ -116,7 +116,10 @@ dungeon: {
           fn = lib.setFunctionArgs (
             scope:
             if positional f then expand scope [ (f scope) ]
-            else expand scope ((f (builtins.intersectAttrs (lib.functionArgs f) (chan // scope))).includes or [ ])
+            else
+              let r = f (builtins.intersectAttrs (lib.functionArgs f) (chan // scope)); in
+              # a fn result's excludes are live too: exclude effects, read by route.nix excludedAt over the scope
+              expand scope (r.includes or [ ]) ++ map dungeon.effects.exclude (builtins.filter (x: builtins.isAttrs x && x ? name) (r.excludes or [ ]))
           # host/user are advertised optional so nested fn includes see them when the scope has them (content.nix denArgs)
           ) ({ host = true; user = true; } // builtins.mapAttrs (k: opt: opt || chan ? ${k}) (lib.functionArgs f));
         };
