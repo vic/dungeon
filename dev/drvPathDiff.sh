@@ -31,7 +31,7 @@ side() {
   elif raw=$(nix eval --no-write-lock-file "$@" --raw "$ref#." --apply "($apply) $pk" 2>"$tmp/$name.err"); then
     printf '%s\n' "$raw" | sed '/^$/d' > "$tmp/$name.txt"
   else
-    echo "<flake> ERR" > "$tmp/$name.txt"
+    echo "<flake> ERR" > "$tmp/$name.txt"; cat "$tmp/$name.err" >&2
   fi
   for a in "${attrs[@]}"; do
     case $a in
