@@ -62,6 +62,15 @@ dungeon: {
       anon = n: i: "${n}/${toString i}";
       # an inline element is walked through its `includes` only: its other keys are content, and may be cyclic (a let-bound `v` holding `v`)
       inlOnly = e: { includes = e.includes or [ ]; };
+      # Den: one named value at one `name` position is one node; a factory gives several values one position, so `==` splits them.
+      # The site is the relata gen-aspects keys a named include element by (lib/types.nix `includeSite`: name + position of `name`).
+      siteOf = e: let p = builtins.unsafeGetAttrPos "name" e; in if dungeon.inlineAttrs e && builtins.isString (e.name or null) && p != null then "${e.name}@${toString p.line}:${toString p.column}:${p.file}" else null;
+      sitesAt =
+        n: a:
+        lib.concatMap (x: let s = siteOf x.e; in lib.optional (s != null) { ${s} = [ { at = anon n x.i; v = x.e; } ]; } ++ lib.optionals (dungeon.inlineAttrs x.e) (sitesAt (anon n x.i) (inlOnly x.e))) (inl a)
+        ++ lib.concatMap (k: sitesAt k.p k.v) (if builtins.isAttrs a then kidList n a else [ ]);
+      # first sighting at the site whose value is `==` (a failing comparison is not equal), else the slot's own anon
+      canon = sites: n: x: let s = siteOf x.e; same = c: let r = builtins.tryEval (c.v == x.e); in r.success && r.value; in if s == null then anon n x.i else (lib.findFirst same { at = anon n x.i; } sites.${s}).at;
       # configure-aspects.mdx:134-139: a fn taking no named args is a positional `ctx:` include; `{ class, aspect-chain }` is a static leaf
       positional = e: builtins.isFunction e && lib.functionArgs e == { };
       staticLeaf = e: builtins.isFunction e && (lib.functionArgs e) ? class && (lib.functionArgs e) ? aspect-chain;
@@ -143,13 +152,15 @@ dungeon: {
     in
     {
       inherit tree;
+      # site -> sightings, merged across definitions by the `inlineSites` option (view.nix)
+      sites = lib.zipAttrsWith (_: lib.concatLists) (lib.concatLists (lib.mapAttrsToList sitesAt tree));
       polIncs = lib.concatMapAttrs polsAt (lib.filterAttrs (_: v: builtins.isAttrs v || builtins.isFunction v) (if builtins.isAttrs raw then raw else { }));
       # include slots become refs to the hoisted anons; `policies` is stripped (policy records live in the `policies` field)
       fixed =
-        den:
+        den: sites:
         let
           reg = den.rawAspects or den.aspects;
-          fix = n: a: a // { includes = map (x: if x.inc.slot == "anon" then lib.getAttrFromPath (dungeon.aspectPath reg (anon n x.i)) reg else if x.inc.slot == "ref" && builtins.isAttrs x.e then removeAttrs x.e [ "__functor" ] else x.e) (builtins.filter (x: x.inc.slot != null) (inl a)); };
+          fix = n: a: a // { includes = map (x: if x.inc.slot == "anon" then lib.getAttrFromPath (dungeon.aspectPath reg (canon sites n x)) reg else if x.inc.slot == "ref" && builtins.isAttrs x.e then removeAttrs x.e [ "__functor" ] else x.e) (builtins.filter (x: x.inc.slot != null) (inl a)); };
           fixTree = n: a: if builtins.isAttrs a then mapKids fixTree n (if builtins.isList (a.includes or null) then fix n a else a) else a;
           strip = a: if builtins.isAttrs a then removeAttrs a [ "policies" ] else a;
           # an inline element's own inline includes are its nested keys `<i>` (registry `<anon>/<i>`, resolved by aspectPath)

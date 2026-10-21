@@ -175,6 +175,8 @@ dungeon: {
           options.homes = lib.mkOption { type = t.lazyAttrsOf (t.lazyAttrsOf t.raw); default = { }; };
           options.systems = lib.mkOption { type = t.listOf t.str; default = [ ]; };
           options.unregistered = lib.mkOption { type = t.listOf t.str; default = [ ]; };
+          # named inline include sightings by site (normalize.nix sitesAt), across every definition
+          options.inlineSites = lib.mkOption { type = t.lazyAttrsOf (t.listOf t.raw); default = { }; };
         };
     };
 }

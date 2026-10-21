@@ -22,10 +22,10 @@ let
     if leaf != "default" && !builtins.isAttrs d.value then
       { _file = d.file; ${leaf} = d.value; }
     else
-      { den, ... }:
+      { den, config, ... }:
       let
         n = dungeon.normalize lib leaf (dungeon.view.cnfOf den) (if leaf == "default" then { default = d.value; } else d.value);
-        fixed = n.fixed den;
+        fixed = n.fixed den config.inlineSites;
       in
       {
         _file = d.file;
@@ -34,6 +34,7 @@ let
         policyRecs = lib.optionalAttrs (leaf == "aspects") n.recs;
         rawFns = lib.optionalAttrs (leaf == "aspects") (lib.filterAttrs (_: builtins.isFunction) d.value);
         aspectPolicies = lib.optionalAttrs (leaf == "aspects" || leaf == "default") n.polIncs;
+        inlineSites = n.sites;
         unregistered = dungeon.unregistered (dungeon.view.cnf0Of den) (if leaf == "default" then { default = d.value; } else d.value);
       };
   # built hosts whose intoAttr head is `o`
