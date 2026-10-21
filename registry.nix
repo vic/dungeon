@@ -4,8 +4,8 @@
 # name      unique id
 # kind      "template" | "flake": drvPathDiff, input `denInput` = Den vs dungeon
 #           "nix-unit": nix-unit test `attrs` of the flake, run with den = dungeon
-#           "noflake": npins-based Den template (ci/noflake.sh)
-# flake     flake ref, no `#`. "github:denful/den?dir=templates/X" is read from the Den rev pinned in ci/den-rev.
+#           "noflake": npins-based Den template (dev/noflake.sh)
+# flake     flake ref, no `#`. "github:denful/den?dir=templates/X" is read from the latest Den (override: DEN_SRC=<dir>).
 # attrs     "auto" (all nixos/darwin/home configurations) or a list: [ "nixosConfigurations.foo" "packages.x86_64-linux.bar" ]
 # denInput  name of the flake input that dungeon replaces (default "den")
 # ignore    attr names excluded on both sides

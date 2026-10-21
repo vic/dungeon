@@ -1,0 +1,36 @@
+{
+  "entries": {
+    "minimal": "OK",
+    "bogus": "OK",
+    "noflake": "OK",
+    "flake-parts-modules": "OK",
+    "terranix-demo": "OK",
+    "nvf-standalone": "OK",
+    "default": "OK",
+    "example": "OK",
+    "microvm": "OK",
+    "fleet-demo": "OK"
+  },
+  "tests": {
+    "deadbugs": {
+      "pass": 260,
+      "total": 272
+    },
+    "c1": {
+      "pass": 74,
+      "total": 109
+    },
+    "c2": {
+      "pass": 82,
+      "total": 139
+    },
+    "c3": {
+      "pass": 192,
+      "total": 248
+    },
+    "c4": {
+      "pass": 21,
+      "total": 46
+    }
+  }
+}

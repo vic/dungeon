@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# usage: ci/noflake.sh <den-src> <den-impl-dir>  -> "<toplevel.drv> <sh.drv>" of Den's noflake template with den=<den-impl-dir>
+# usage: dev/noflake.sh <den-src> <den-impl-dir>  -> "<toplevel.drv> <sh.drv>" of Den's noflake template with den=<den-impl-dir>
 set -eu
 src=$(realpath "$1") d=$(realpath "$2")
 cd "$src/templates/noflake"
