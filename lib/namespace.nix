@@ -26,7 +26,13 @@ dungeon: {
       config = {
         ${name} = builtins.foldl' lib.recursiveUpdate { } up;
         den.aspects.${name}.provides = config.${name};
-        _module.args.${name} = callable config._module.args.den.aspects.${name}.provides config.${name};
+        # a namespace root's `_` bundles every aspect in it and shows its `includes` (issue-588)
+        _module.args.${name} =
+          let
+            pv = config._module.args.den.aspects.${name}.provides;
+            b = dungeon.bundle (builtins.attrValues (removeAttrs pv [ "__functor" ]));
+          in
+          callable pv config.${name} // { _ = removeAttrs pv [ "__functor" ] // b // { inherit (b.__functor b { }) includes; }; };
         # static condition: a `mkIf` would sit unmerged inside the freeform `flake` leaf
         flake = lib.optionalAttrs (builtins.elem true srcs) { denful.${name} = config.${name}; };
       };

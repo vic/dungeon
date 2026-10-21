@@ -16,6 +16,17 @@ let
         merge = _loc: _defs: if leaf == "default" then w.aspects.default else w.${leaf};
       };
     };
+  # Flat hosts `den.hosts.<name> = { system; ... }` are grouped under their system (flat-hosts tests);
+  # `system` may sit in another definition than the content, so it is gathered across all of them first.
+  flatHosts =
+    lib: defs:
+    let
+      isSystem = k: builtins.elem k lib.systems.flakeExposed;
+      flat = d: lib.filterAttrs (k: _: !isSystem k) d.value;
+      systemOf = name: let ss = lib.concatMap (d: lib.optional ((flat d).${name} ? system) (flat d).${name}.system) defs; in
+        if ss == [ ] then throw "den: flat host '${name}' must specify 'system' (e.g. system = \"x86_64-linux\")" else builtins.head ss;
+    in
+    map (d: d // { value = lib.foldlAttrs (acc: n: v: let s = systemOf n; in acc // { ${s} = (acc.${s} or { }) // { ${n} = removeAttrs v [ "system" ]; }; }) (lib.filterAttrs (k: _: isSystem k) d.value) (flat d); }) defs;
   # Lowering lives in normalize.nix; this only shapes the Gen module (inline includes -> anon aspects, design-fleet G3 arm a).
   lower =
     lib: leaf: d:
@@ -48,7 +59,8 @@ let
     declareFlake:
     { lib, config, options, inputs, ... }@margs:
     let
-      w = dungeon.evalDen (lib.concatMap (l: lib.optionals options.den.${l}.isDefined (toModules lib l (lib.reverseList options.den.${l}.definitionsWithLocations))) leaves ++ lib.optional (margs ? withSystem) { _module.args.withSystem = margs.withSystem; });
+      # hosts keep nixpkgs' (reverse) order: gen-merge reverses it back, so instance lists concatenate in declaration order
+      w = dungeon.evalDen (lib.concatMap (l: lib.optionals options.den.${l}.isDefined (toModules lib l ((if l == "hosts" then flatHosts lib else lib.reverseList) options.den.${l}.definitionsWithLocations))) leaves ++ lib.optional (margs ? withSystem) { _module.args.withSystem = margs.withSystem; });
     in
     {
       # freeform `flake` (keyed: dedups with a user flakeOutputs.flake import) + typed outputs dungeon writes.
@@ -57,6 +69,8 @@ let
         map (n: dungeon.ciSurface.flakeOutputs.${n}) [ "flake" "nixosConfigurations" "darwinConfigurations" "homeConfigurations" ]) else [ ]
       # flake-parts-lib: specialArg of a running mkFlake (perSystem/systems exist only there)
       ) ++ lib.optional (margs ? flake-parts-lib) ({ den, ... }: dungeon.flakeParts den lib)
+      # predicate builders ship in den.default (reference/batteries.mdx:349), as registry aspects so their identity stays a root
+      ++ [ ({ den, ... }: { config.den.aspects = dungeon.batteries.predicates; config.den.default.includes = map (n: den.aspects.${n}) (builtins.attrNames dungeon.batteries.predicates); }) ]
       ++ [ ({ den, ... }: { flake = dungeon.instantiates den lib; }) ({ options, ... }: { config.flake = dungeon.outputs config._module.args.den inputs options; }) ({ den, ... }: { config.flake = hostsElsewhere den inputs lib; }) ];
       # config.den.lib is the builtin lib with user definitions deep-merged over it (both `den.lib` and `config.den.lib` read it).
       options.den = lib.genAttrs leaves (capture lib w) // { lib = lib.mkOption { default = { }; type = lib.mkOptionType { name = "denLib"; merge = _: defs: builtins.foldl' lib.recursiveUpdate w.lib (map (d: d.value) defs); }; }; };
@@ -85,9 +99,14 @@ let
               modules =
                 let
                   base = lib.head (lib.splitString "@" name);
-                  args = { home = h // { inherit name system; }; user = h // { inherit system; name = base; userName = base; }; };
+                  # standalone-home-host-context: `user@host` binds `host`, the declared host or a synthetic `{ name }` one (no class: nothing instantiated)
+                  declaredHost = lib.concatLists (lib.mapAttrsToList (_: hs: lib.optional (hs ? ${h.hostName}) hs.${h.hostName}) den.hosts);
+                  hostArg = lib.optionalAttrs (h.hostName != null) { host = if declaredHost != [ ] then lib.head declaredHost else { name = h.hostName; hostName = h.hostName; }; };
+                  args = { home = h // { inherit name system; }; user = h // { inherit system; name = base; userName = base; }; } // hostArg;
                   dcl = cl den.aspects.default;
-                  scope = dungeon.schemaCl den.schema den.aspects true "home" ++ lib.concatMap (n: lib.optionals (den.aspects ? ${n}) (cl den.aspects.${n})) (lib.unique [ name base ])
+                  # aspect policies of the home scope fire with its ctx; their include effects join the scope
+                  scope = scope0 ++ dungeon.addsOf den.aspects args (dungeon.uniqPols (lib.concatMap (a: a.policyIncs) (dcl ++ scope0)));
+                  scope0 = dungeon.schemaCl den.schema den.aspects true "home" ++ lib.concatMap (n: lib.optionals (den.aspects ? ${n}) (cl den.aspects.${n})) (lib.unique [ name base ])
                     # standalone-home-manager.mdx:184-186: `provides.<host>` on the user aspect, only this home's host
                     ++ lib.optionals (h.hostName != null && den.aspects ? ${base} && (den.aspects.${base}.provides or { }) ? ${h.hostName}) (cl den.aspects.${base}.provides.${h.hostName});
                 in

@@ -152,7 +152,8 @@ dungeon: {
         hostCl =
           n:
           let
-            cl = dungeon.closure world.aspects world.aspects.default ++ clOf n;
+            # the host scope as route.nix hostBase: default + schema.host.includes refs + instance includes + host aspect
+            cl = dungeon.closure world.aspects world.aspects.default ++ dungeon.schemaCl world.schema world.aspects false "host" ++ dungeon.schemaCl { host.includes = (hostOf n).includes or [ ]; } world.aspects true "host" ++ clOf n;
             ex = map (e: e.value.name) (builtins.filter (e: e.value ? name) (dungeon.effectsOf "exclude" (dungeon.firePols { host = hostOf n; } (polsOf "host" cl))));
           in
           builtins.filter (a: !builtins.elem a.name ex) cl;

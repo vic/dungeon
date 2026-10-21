@@ -35,6 +35,21 @@ dungeon: {
       };
     in
     map one effs;
+  # include effects of `pols` fired over `args`, as closure records (inline class attrs -> synthetic "<policy>#<i>")
+  addsOf =
+    aspects: args: pols:
+    let
+      cl = dungeon.closure aspects;
+      declared = n: let r = builtins.foldl' (e: s: if builtins.isAttrs e && e ? ${s} then e.${s} else null) aspects (dungeon.aspectPath aspects n); in if r == null then throw "den: aspect ${n} not declared" else r;
+      inc = x:
+        if (x.e.__effect or null) != "include" then [ ]
+        # parametric include `{ host }: { <class> = ...; }` binds the scope ctx (tutorials/microvm.mdx stage 1)
+        else if builtins.isFunction x.e.value then [ { name = "${x.p.name}#${toString x.i}"; content = x.e.value (builtins.intersectAttrs (dungeon.genLib.functionArgs x.e.value) args); includes = [ ]; quirks = { }; policyIncs = [ ]; } ]
+        else if x.e.value ? name then cl (declared x.e.value.name)
+        else if x.e.value ? includes then builtins.concatMap (b: cl (declared b.name)) x.e.value.includes
+        else [ { name = "${x.p.name}#${toString x.i}"; content = x.e.value; includes = [ ]; quirks = { }; policyIncs = [ ]; } ];
+    in
+    builtins.concatMap inc (dungeon.firePols args pols);
   route =
     sch: aspects: host: users:
     let
@@ -47,6 +62,8 @@ dungeon: {
       # instance-own includes join the host scope like schema.host.includes (custom-entity-kinds.mdx:47-49)
       hostBase = schemaRefs ++ dungeon.schemaCl { host = { inherit (host) includes; }; } aspects true "host" ++ (if aspects ? ${host.name} then cl aspects.${host.name} else [ ]);
       # schema.<kind>.includes policies (possibly nested in `includes` lists); non-policy elements are skipped
+      # a policy named in the kind's or the instance's excludes does not fire (instance-collection-merge excludes cell)
+      polEx = kind: map (p: p.name) (builtins.filter (p: builtins.isAttrs p && (p.__isPolicy or false)) ((sch.${kind}.excludes or [ ]) ++ host.excludes));
       schemaPols =
         kind:
         let
@@ -56,7 +73,7 @@ dungeon: {
             else if builtins.isAttrs x && builtins.isList (x.includes or null) then go x.includes
             else [ ];
         in
-        go (sch.${kind}.includes or [ ]);
+        builtins.filter (p: !builtins.elem p.name (polEx kind)) (go (sch.${kind}.includes or [ ]));
       # hasAspect over the policy-free closure (policy-added aspects excluded, else it would cycle)
       hostProv = (aspects.${host.name} or { }).provides or { };
       provCl = k: if builtins.isAttrs (hostProv.${k} or null) then cl hostProv.${k} else [ ];
@@ -90,7 +107,7 @@ dungeon: {
       # pass -1: policy-free static closures
       # user aspect (`u@host` wins) + host child named after the user (where-config-lands.mdx:72, per user: the every-user reach is a v1 defect, L79-85)
       # `tux.provides.igloo`: tux home + igloo OS, only on igloo (where-config-lands.mdx:77-78)
-      userCl = u: (let r = aspects."${u}@${host.name}" or aspects.${u} or null; in if r == null then [ ] else cl r ++ provOf host.name r) ++ (let c = (aspects.${host.name} or { }).${u} or null; in if builtins.isAttrs c && c ? name then cl c else [ ]);
+      userCl = u: dungeon.schemaCl { user.includes = (host.users.${u} or { }).includes or [ ]; } aspects true "user" ++ (let r = aspects."${u}@${host.name}" or aspects.${u} or null; in if r == null then [ ] else cl r ++ provOf host.name r) ++ (let c = (aspects.${host.name} or { }).${u} or null; in if builtins.isAttrs c && c ? name then cl c else [ ]);
       userStatic = u: defaultCl ++ hostBase ++ tuCl ++ provCl u ++ userCl u ++ relayCl u;
       m0 = s: (builtins.listToAttrs (map (u: { name = userScope u; value = names (userStatic u); }) allUsers) // { ${host.name} = names (defaultCl ++ hostBase ++ tuCl); }).${s};
       # pass k fires policies with hasAspect reading pass k-1 membership, until membership is unchanged; oscillation throws
@@ -137,20 +154,7 @@ dungeon: {
         base ++ routes (argsOf u) (defaultCl ++ base);
       # Aspect policies of the host closure fire at user scope; include effects add aspects (inline class attrs -> synthetic "<policy>#<i>").
       # shortcut: no gen.program stratification (R1), policies of policy-included aspects and per-scope dedup come later.
-      adds =
-        args: pols:
-        let
-          eff = dungeon.firePols args pols;
-          declared = n: let r = builtins.foldl' (e: s: if builtins.isAttrs e && e ? ${s} then e.${s} else null) aspects (dungeon.aspectPath aspects n); in if r == null then throw "den: aspect ${n} not declared" else r;
-          inc = x:
-            if (x.e.__effect or null) != "include" then [ ]
-            # parametric include `{ host }: { <class> = ...; }` binds the scope ctx (tutorials/microvm.mdx stage 1)
-            else if builtins.isFunction x.e.value then [ { name = "${x.p.name}#${toString x.i}"; content = x.e.value (builtins.intersectAttrs (dungeon.genLib.functionArgs x.e.value) args); includes = [ ]; quirks = { }; policyIncs = [ ]; } ]
-            else if x.e.value ? name then cl (declared x.e.value.name)
-            else if x.e.value ? includes then builtins.concatMap (b: cl (declared b.name)) x.e.value.includes
-            else [ { name = "${x.p.name}#${toString x.i}"; content = x.e.value; includes = [ ]; quirks = { }; policyIncs = [ ]; } ];
-        in
-        builtins.concatMap inc eff;
+      adds = dungeon.addsOf aspects;
       # one firer per scope: schema.user policies + aspect policies of the routed scope (D1)
       routes = args: scope: dungeon.routesOf (dungeon.effectsOf "route" (dungeon.firePols args (schemaPols "user" ++ dungeon.uniqPols (builtins.concatMap (a: a.policyIncs) (defaultCl ++ hostBase ++ scope))))) scope;
       userVal = u: a: dungeon.flatten (argsOf u) [ a.content.user ];

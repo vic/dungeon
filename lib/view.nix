@@ -5,6 +5,21 @@ dungeon: {
       inherit (dungeon) gen;
       t = dungeon.genLib.types;
       cat = category: builtins.mapAttrs (_: _: { inherit category; });
+      # an entity's freeform key (Den instance-collection-merge): lists concatenate, attrsets merge, functions take the last,
+      # anything else must agree across definitions
+      denRaw = dungeon.genLib.mkOptionType {
+        name = "denRaw";
+        merge =
+          loc: defs:
+          builtins.foldl' (
+            acc: v:
+            if builtins.isList acc && builtins.isList v then acc ++ v
+            else if builtins.isAttrs acc && builtins.isAttrs v then dungeon.genLib.recursiveUpdate acc v
+            else if builtins.isFunction acc && builtins.isFunction v then v
+            else if acc == v then acc
+            else throw "den: conflicting definitions for `${dungeon.genLib.last loc}`"
+          ) (builtins.head defs).value (map (d: d.value) (builtins.tail defs));
+      };
       # quirk names are channel keys (quirks never depend on aspects: no cycle); output classes: guides/flake-outputs.mdx:25-36.
       cnf0Of = c: {
         keySemantics =
@@ -54,8 +69,9 @@ dungeon: {
               # `_` reads as the provides children; included, it bundles the nested children
               # (provides children are included by name, include-children.nix test-include-children-with-provides).
               _ = provs // dungeon.bundle (map (k: norm "${name}/${k}" e.${k}) (kids e));
-              # a namespace root is a `provides` set: its `_` bundles every aspect in it and shows its `includes` (issue-588)
-              provides = provs // { _ = let b = dungeon.bundle (builtins.attrValues provs); in provs // b // { inherit (b.__functor b { }) includes; }; };
+              # published `provides` = the children only, callable as an aspect including them all (multidef-provides-internals).
+              # A namespace root's `_` is added in namespace.nix.
+              provides = provs // dungeon.bundle (builtins.attrValues provs);
             }
             // {
               inherit name;
@@ -102,6 +118,8 @@ dungeon: {
                 # den.schema.host is a gen-schema kind: its body and imports compose into every host; mkInstanceType adds
                 # `name`, `id_hash` and the open/strict instance mode (entities.mdx:183-192, reference/lib.mdx:238-242).
                 instanceOf config.schema.host [
+                  # an open host's freeform keys merge as Den's (denRaw), over gen-schema's open `attrsOf anything`
+                  (lib.optionalAttrs (!config.schema.host.isStrict) { config._module.freeformType = lib.mkForce (t.lazyAttrsOf denRaw); })
                   ({ name, ... }@hargs:
                   {
                     options.hostName = lib.mkOption { type = t.str; default = name; };

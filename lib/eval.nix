@@ -40,6 +40,7 @@ dungeon: {
         batteries.user-shell = dungeon.batteryFns.user-shell;
         batteries.tty-autologin = dungeon.batteryFns.tty-autologin;
         batteries.unfree = dungeon.batteries.unfree;
+        batteries.insecure = dungeon.batteries.insecure;
         provides = world.batteries;
         _ = world.provides;
         lib.parametric = dungeon.parametric;

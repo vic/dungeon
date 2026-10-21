@@ -24,7 +24,8 @@ dungeon: {
     let
       # fn aspects/includes are class content: each declared class key projects its own part of the fn result
       classes = builtins.filter (k: dungeon.gen.aspects.keyCategory cnf k == "class") (builtins.attrNames cnf.keySemantics);
-      bare = f: lib.genAttrs classes (cls: lib.setFunctionArgs (args: { imports = [ ((f (builtins.intersectAttrs (lib.functionArgs f) args)).${cls} or { }) ]; }) (lib.functionArgs f));
+      # a list result is a list of effects (fnIncs delivers them), not class content
+      bare = f: lib.genAttrs classes (cls: lib.setFunctionArgs (args: { imports = [ (let r = f (builtins.intersectAttrs (lib.functionArgs f) args); in if builtins.isList r then { } else r.${cls} or { }) ]; }) (lib.functionArgs f));
       # structural keys are never nested aspects; other keys go through Gen keyCategory (class/channel keys hold content)
       skip = [ "provides" "_" "includes" "excludes" "policies" "meta" ];
       # mkForce/mkIf/mkOrder on an aspect: lower its content, keep the wrapper (gen-aspects projects through it, priority kept)
@@ -124,9 +125,12 @@ dungeon: {
               e:
               let
                 c = dungeon.classifyInc e;
-                inline = r: lib.optional (content r != { }) (dungeon.effects.include (content r)) ++ expand scope (r.includes or [ ]);
+                inline = r: if builtins.isList r then expand scope [ r ] else lib.optional (content r != { }) (dungeon.effects.include (content r)) ++ expand scope (r.includes or [ ]);
               in
-              if c.policy then [ ]
+              # a list (a fn's result) is a list of effects, nested lists flattened; only include effects are expressible as an include
+              if builtins.isList e then
+                map (x: if (x.__effect or null) == "include" then x else throw "den: include of `${n}` returned a '${x.__effect or "non-effect"}' effect in a list") (lib.flatten e)
+              else if c.policy then [ ]
               else if c.slot == "ref" then [ (dungeon.effects.include e) ]
               # configure-aspects.mdx:134-139 kind (2): class + aspect-chain are bound where a class is resolved, not at a scope
               else if staticLeaf e then [ (dungeon.effects.include (leafAspect e)) ]
@@ -144,8 +148,9 @@ dungeon: {
             if positional f then expand scope [ (f scope) ]
             else
               let r = f (builtins.intersectAttrs (lib.functionArgs f) (chan // scope)); in
+              if builtins.isList r then expand scope [ r ]
               # a fn result's excludes are live too: exclude effects, read by route.nix excludedAt over the scope
-              expand scope (r.includes or [ ]) ++ map dungeon.effects.exclude (builtins.filter (x: builtins.isAttrs x && x ? name) (r.excludes or [ ]))
+              else expand scope (r.includes or [ ]) ++ map dungeon.effects.exclude (builtins.filter (x: builtins.isAttrs x && x ? name) (r.excludes or [ ]))
           # host/user are advertised optional so nested fn includes see them when the scope has them (content.nix denArgs)
           ) ({ host = true; user = true; } // builtins.mapAttrs (k: opt: opt || chan ? ${k}) (lib.functionArgs f));
         };

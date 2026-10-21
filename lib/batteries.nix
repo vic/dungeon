@@ -1,19 +1,40 @@
 # Inner module pre-declaring battery aspects (design-gen.md §4; content ASSUMED from Den docs).
-dungeon: {
-  # reference/batteries.mdx:349: names -> nixpkgs.config.allowUnfreePredicate in nixos, darwin, homeManager.
-  # The predicate builder is a keyed module, so every include imports it once per target eval (stands in for den.default).
+dungeon:
+let
+  # reference/batteries.mdx:137-157, 347-360: `<battery> names` sets `<opt>.packages`; the predicate builder (den.default) declares
+  # the option per class and turns it into nixpkgs.config.<cfg>. Den: modules/aspects/batteries/{unfree,insecure}/*-predicate-builder.nix
   # shortcut: user-included names are not lifted onto the host OS config (batteries.mdx:349); add with user->host routing.
-  batteries.unfree =
-    names:
+  names = opt: ns: let m = { ${opt}.packages = ns; }; in { nixos = m; darwin = m; homeManager = m; };
+  builder =
+    { battery, opt, value }:
     let
-      predicate = { config, lib, ... }: {
-        key = "dungeon:batteries:unfree";
-        options.unfree.packages = lib.mkOption { type = lib.types.listOf lib.types.str; default = [ ]; };
-        config.nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) config.unfree.packages;
-      };
-      m = { imports = [ predicate ]; unfree.packages = names; };
+      module =
+        { config, lib, ... }@args:
+        {
+          key = "den/${battery}-predicate";
+          options.${opt}.packages = lib.mkOption { type = lib.types.listOf lib.types.str; default = [ ]; };
+          # home-manager refuses nixpkgs.config under useGlobalPkgs: the host's predicate covers it there
+          config.nixpkgs = lib.mkIf (config.${opt}.packages != [ ] && !(args.osConfig.home-manager.useGlobalPkgs or false)) {
+            config = value lib config.${opt}.packages;
+          };
+        };
     in
-    { nixos = m; darwin = m; homeManager = m; };
+    {
+      # entity-keyed children `<battery>-predicate/{os,user,home}` (Den shipped-battery-chain identities); class content selects the entity
+      includes = [
+        { name = "os"; nixos.imports = [ module ]; darwin.imports = [ module ]; }
+        { name = "user"; homeManager.imports = [ module ]; }
+        { name = "home"; homeManager.imports = [ module ]; }
+      ];
+    };
+in
+{
+  batteries.unfree = names "unfree";
+  batteries.insecure = names "permittedInsecurePackages";
+  batteries.predicates = {
+    unfree-predicate = builder { battery = "unfree"; opt = "unfree"; value = lib: ps: { allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) ps; }; };
+    insecure-predicate = builder { battery = "insecure"; opt = "permittedInsecurePackages"; value = _: ps: { permittedInsecurePackages = ps; }; };
+  };
   batteries.module = { config, ... }: let withSystem = config._module.args.withSystem; homeOf = sys: n: if builtins.match ".*-darwin" sys != null then "/Users/${n}" else "/home/${n}"; in {
     # reference/batteries.mdx:88: NixOS wheel+networkmanager; Darwin system.primaryUser.
     aspects.primary-user.user =
