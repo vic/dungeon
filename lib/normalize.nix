@@ -27,11 +27,15 @@ dungeon: {
       bare = f: lib.genAttrs classes (cls: lib.setFunctionArgs (args: { imports = [ ((f (builtins.intersectAttrs (lib.functionArgs f) args)).${cls} or { }) ]; }) (lib.functionArgs f));
       # structural keys are never nested aspects; other keys go through Gen keyCategory (class/channel keys hold content)
       skip = [ "provides" "_" "includes" "excludes" "policies" "meta" ];
+      # mkForce/mkIf/mkOrder on an aspect: lower its content, keep the wrapper (gen-aspects projects through it, priority kept)
+      prop = v: builtins.isAttrs v && builtins.elem (v._type or null) [ "override" "if" "order" ];
+      un = v: if prop v then un v.content else v;
+      under = f: path: v: if prop v then v // { content = under f path v.content; } else f path v;
       classifyKey =
         a: k:
         if builtins.elem k [ "provides" "_" ] then
           if builtins.isAttrs (a.${k} or null) then "provides" else null
-        else if !builtins.elem k skip && dungeon.gen.aspects.keyCategory cnf k == null && (builtins.isFunction a.${k} || builtins.isAttrs a.${k} && !(a.${k} ? _type)) then
+        else if !builtins.elem k skip && dungeon.gen.aspects.keyCategory cnf k == null && (builtins.isFunction (un a.${k}) || builtins.isAttrs (un a.${k}) && !(un a.${k} ? _type)) then
           "nested"
         else
           null;
@@ -39,12 +43,12 @@ dungeon: {
       mapKids =
         f: path: a:
         a
-        // lib.genAttrs (keysOf a "provides") (k: builtins.mapAttrs (c: v: f "${path}/${c}" v) a.${k})
-        // lib.genAttrs (keysOf a "nested") (k: f "${path}/${k}" a.${k});
+        // lib.genAttrs (keysOf a "provides") (k: builtins.mapAttrs (c: v: under f "${path}/${c}" v) a.${k})
+        // lib.genAttrs (keysOf a "nested") (k: under f "${path}/${k}" a.${k});
       kidList =
         path: a:
-        lib.concatMap (k: lib.mapAttrsToList (c: v: { p = "${path}/${c}"; inherit v; }) a.${k}) (keysOf a "provides")
-        ++ map (k: { p = "${path}/${k}"; v = a.${k}; }) (keysOf a "nested");
+        lib.concatMap (k: lib.mapAttrsToList (c: v: { p = "${path}/${c}"; v = un v; }) a.${k}) (keysOf a "provides")
+        ++ map (k: { p = "${path}/${k}"; v = un a.${k}; }) (keysOf a "nested");
       # `_` is an alias of `provides` (reference/aspects.mdx:69): one key reaches Gen, so both spellings are one sub-aspect.
       unalias =
         path: a:
@@ -97,7 +101,7 @@ dungeon: {
         # `user` is advertised only where every consumer binds it: the module system would otherwise be asked for it
         __functionArgs = { host = false; } // lib.optionalAttrs (builtins.elem cls userScoped) { user = false; };
       });
-      tree = if builtins.isAttrs raw then builtins.mapAttrs normAspect raw else raw;
+      tree = if builtins.isAttrs raw then builtins.mapAttrs (under normAspect) raw else raw;
       # Keys exist for every include slot (elements stay unforced: they may reference `den`, which would cycle).
       anonVal = fixA: p: e: if dungeon.isBundle e then e.__functor e { } else if positional e then { } else if staticLeaf e then leafAspect e else if builtins.isFunction e then bare e else if dungeon.inlineAttrs e then fixA p e else { };
       anonsAt =
@@ -159,10 +163,10 @@ dungeon: {
     {
       inherit tree;
       # the include element as written, per anon slot: an unregistered class is read from it by name (resolve.nix)
-      rawAnons = lib.concatMapAttrs (n: a: let at = n: a: builtins.listToAttrs (map (x: { name = anon n x.i; value = x.e; }) (inl a)) // lib.foldl' (acc: k: acc // at k.p k.v) { } (if builtins.isAttrs a then kidList n a else [ ]); in at n a) tree;
+      rawAnons = lib.concatMapAttrs (n: a: let at = n: a: builtins.listToAttrs (map (x: { name = anon n x.i; value = x.e; }) (inl a)) // lib.foldl' (acc: k: acc // at k.p k.v) { } (if builtins.isAttrs a then kidList n a else [ ]); in at n (un a)) tree;
       # site -> sightings, merged across definitions by the `inlineSites` option (view.nix)
-      sites = lib.zipAttrsWith (_: lib.concatLists) (lib.concatLists (lib.mapAttrsToList sitesAt tree));
-      polIncs = lib.concatMapAttrs polsAt (lib.filterAttrs (_: v: builtins.isAttrs v || builtins.isFunction v) (if builtins.isAttrs raw then raw else { }));
+      sites = lib.zipAttrsWith (_: lib.concatLists) (lib.concatLists (lib.mapAttrsToList (n: a: sitesAt n (un a)) tree));
+      polIncs = lib.concatMapAttrs (n: a: polsAt n (un a)) (lib.filterAttrs (_: v: builtins.isAttrs v || builtins.isFunction v) (if builtins.isAttrs raw then raw else { }));
       # include slots become refs to the hoisted anons; `policies` is stripped (policy records live in the `policies` field)
       fixed =
         den: sites:
@@ -174,7 +178,7 @@ dungeon: {
           # an inline element's own inline includes are its nested keys `<i>` (registry `<anon>/<i>`, resolved by aspectPath)
           fixA = p: e: strip (fixTree p e) // builtins.listToAttrs (map (x: { name = toString x.i; value = anonVal fixA (anon p x.i) x.e; }) (inl e));
         in
-        builtins.mapAttrs (n: a: strip (fixTree n a)) tree // { __anons = lib.concatMapAttrs (anonsAt fixA) tree; };
-      recs = lib.concatMapAttrs (n: a: lib.optionalAttrs (builtins.isAttrs a && builtins.isAttrs (a.policies or null)) { ${n} = builtins.mapAttrs (p: fn: { __isPolicy = true; inherit fn; name = "${n}.${p}"; }) a.policies; }) tree;
+        builtins.mapAttrs (under (n: a: strip (fixTree n a))) tree // { __anons = lib.concatMapAttrs (n: a: anonsAt fixA n (un a)) tree; };
+      recs = lib.concatMapAttrs (n: a: lib.optionalAttrs (builtins.isAttrs (un a) && builtins.isAttrs ((un a).policies or null)) { ${n} = builtins.mapAttrs (p: fn: { __isPolicy = true; inherit fn; name = "${n}.${p}"; }) (un a).policies; }) tree;
     };
 }
