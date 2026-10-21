@@ -18,7 +18,8 @@ dungeon: {
       # + the classes flake-scope policy.instantiate specs collect (reference/policies.mdx:162-172): a parametric aspect's
       # class keys are not visible before it is applied, the spec names them. Fired with the empty flake ctx.
       instClasses = c: map (e: e.value.class) (builtins.filter (e: e.value ? class && e.value ? intoAttr) (dungeon.effectsOf "instantiate" (dungeon.firePols { } (builtins.filter (p: p.__isPolicy or false) (c.schema.flake.includes or [ ])))));
-      cnfOf = c: { keySemantics = (cnf0Of c).keySemantics // cat "class" (builtins.listToAttrs (map (name: { inherit name; value = null; }) (c.unregistered ++ instClasses c))); };
+      # `provides` is a gen-aspects facet: every child is an aspect whatever its name (reference/aspects.mdx:64)
+      cnfOf = c: let cnf = { keySemantics = (cnf0Of c).keySemantics // cat "class" (builtins.listToAttrs (map (name: { inherit name; value = null; }) (c.unregistered ++ instClasses c))) // { provides = { category = "facet"; option = dungeon.genLib.mkOption { type = t.lazyAttrsOf (gen.aspects.aspectType cnf); default = { }; }; }; }; }; in cnf;
       mkAspects =
         decl:
         let
@@ -42,11 +43,20 @@ dungeon: {
               c == "class" && gen.aspects.hasClassContent e.${k};
           norm =
             name: e:
+            let provs = builtins.mapAttrs (c: v: norm "${name}/provides/${c}" v) (e.provides or { }); in
             e
             // builtins.listToAttrs (map (k: { name = k; value = norm "${name}/${k}" e.${k}; }) (kids e))
             # `<aspect>.provides.<n>` is also reachable as `<aspect>.<n>` (reference/aspects.mdx:69); a same-named own key wins.
-            // builtins.mapAttrs (c: v: norm "${name}/provides/${c}" v) (removeAttrs (if builtins.isAttrs (e.provides or null) then e.provides else { }) (builtins.attrNames e))
-            // dungeon.genLib.optionalAttrs (builtins.isAttrs (e.provides or null)) { _ = norm "${name}/provides" e.provides; }
+            # an undefined class/channel option reads null and is not an own key (Den forwards over names the aspect does not define);
+            # only those values are forced: forcing `includes` here cycles through refs to this aspect's own children
+            // builtins.removeAttrs provs (builtins.filter (k: !(builtins.elem (gen.aspects.keyCategory cnf k) [ "class" "channel" ] && e.${k} == null)) (builtins.attrNames e))
+            // {
+              # `_` reads as the provides children; included, it bundles the nested children
+              # (provides children are included by name, include-children.nix test-include-children-with-provides).
+              _ = provs // dungeon.bundle (map (k: norm "${name}/${k}" e.${k}) (kids e));
+              # a namespace root is a `provides` set: its `_` bundles every aspect in it and shows its `includes` (issue-588)
+              provides = provs // { _ = let b = dungeon.bundle (builtins.attrValues provs); in provs // b // { inherit (b.__functor b { }) includes; }; };
+            }
             // {
               inherit name;
               policyIncs = builtins.filter (p: !builtins.any (x: builtins.isAttrs x && (x.__isPolicy or false) && x.name == p.name) (e.excludes or [ ])) (decl.aspectPolicies.${name} or [ ]);

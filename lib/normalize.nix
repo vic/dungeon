@@ -3,6 +3,9 @@ dungeon: {
   # policy record or functor-with-args; den.policies values are records from capture (entry.nix), so refs compare by name
   isPol = e: builtins.isAttrs e && ((e.__isPolicy or false) || (e ? __functor && e ? __functionArgs));
   inlineAttrs = e: builtins.isAttrs e && !(e ? key) && !dungeon.isPol e;
+  # `<aspect>._`: a zero-arg functor whose result is the include (include-children tests), so attrNames stay the children
+  bundle = kids: { __functor = _: _: { includes = kids; }; };
+  isBundle = e: builtins.isAttrs e && e ? __functor && !(e ? __functionArgs) && !(e ? key);
   # registry path of `<a>/<b>/...`: the longest registered top-level prefix, then nested keys (anons nest their own inline includes)
   aspectPath =
     aspects: n:
@@ -93,7 +96,7 @@ dungeon: {
       });
       tree = if builtins.isAttrs raw then builtins.mapAttrs normAspect raw else raw;
       # Keys exist for every include slot (elements stay unforced: they may reference `den`, which would cycle).
-      anonVal = fixA: p: e: if positional e then { } else if staticLeaf e then leafAspect e else if builtins.isFunction e then bare e else if dungeon.inlineAttrs e then fixA p e else { };
+      anonVal = fixA: p: e: if dungeon.isBundle e then e.__functor e { } else if positional e then { } else if staticLeaf e then leafAspect e else if builtins.isFunction e then bare e else if dungeon.inlineAttrs e then fixA p e else { };
       anonsAt =
         fixA: n: a:
         builtins.listToAttrs (map (x: { name = anon n x.i; value = anonVal fixA (anon n x.i) x.e; }) (inl a))
