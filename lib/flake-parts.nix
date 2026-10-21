@@ -26,7 +26,7 @@ dungeon: {
       srcs = e: builtins.filter (s: s.a.content ? ${e.fromClass}) (own ++ lib.optionals (e.collectSubtree or false) sub);
       pathOf = e: if e ? intoPath then (if builtins.isFunction e.intoPath then e.intoPath { } else e.intoPath) else e.path;
       argsOf = margs: e: if e ? adaptArgs then e.adaptArgs margs else margs.config.allModuleArgs;
-      deliver = margs: e: lib.setAttrByPath (pathOf e) (dungeon.flatten (argsOf margs e) (map (s: dungeon.content.classModule s.args s.a.content.${e.fromClass}) (srcs e)));
+      deliver = margs: e: lib.setAttrByPath (pathOf e) (dungeon.flatten (argsOf margs e) (map (s: dungeon.content.classModule s.args s.a s.a.content.${e.fromClass}) (srcs e)));
       routes = builtins.filter (e: e.intoClass == "flake-parts") (of "route");
       keys = lib.unique (builtins.attrNames den.hosts ++ builtins.attrNames den.homes);
     in

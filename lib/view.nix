@@ -207,6 +207,11 @@ dungeon: {
           options.inlineSites = lib.mkOption { type = t.lazyAttrsOf (t.listOf t.raw); default = { }; };
           # raw aspect definitions (and raw include elements) by aspect name: unregistered classes are read from here on request
           options.rawDefs = lib.mkOption { type = t.lazyAttrsOf (t.listOf t.raw); default = { }; };
+          # den.config (Den modules/config.nix); `config` is the module keyword, so the leaf lands here
+          options.denConfig = lib.mkOption {
+            type = t.submodule { options.classModuleCollisionPolicy = lib.mkOption { type = t.enum [ "error" "class-wins" "den-wins" ]; default = "error"; }; };
+            default = { };
+          };
         };
     };
 }

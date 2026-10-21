@@ -55,7 +55,7 @@ dungeon: {
               inst = ctx.${kind};
               cl = dungeon.schemaCl world.schema world.aspects true kind ++ dungeon.schemaCl { ${kind}.includes = inst.includes; } world.aspects true kind;
               ex = map (b: b.name) (builtins.filter (b: builtins.isAttrs b && b ? name && !dungeon.isPol b) ((sch.excludes or [ ]) ++ inst.excludes));
-              modulesOf = cls: map (a: dungeon.content.classModule { ${kind} = inst; } a.content.${cls}) (builtins.filter (a: a.content ? ${cls} && !builtins.elem a.name ex) cl);
+              modulesOf = cls: map (a: dungeon.content.classModule { ${kind} = inst; } a a.content.${cls}) (builtins.filter (a: a.content ? ${cls} && !builtins.elem a.name ex) cl);
               # a custom spec (class + instantiate + intoAttr); an entity (registered host) instantiates through hosts.nix
               custom = v: v ? class && v ? instantiate && v ? intoAttr && !builtins.any (s: world.hosts.${s} ? ${v.name or ""}) (builtins.attrNames world.hosts);
             in

@@ -9,7 +9,7 @@ dungeon: {
         hjem = { module = host.hjem.module or inputs.hjem.nixosModules.default; at = u: [ "hjem" "users" u ]; };
         maid = { module = host.maid.module or inputs.nix-maid.nixosModules.default; at = u: [ "users" "users" u "maid" ]; };
       };
-      partsOf = cls: u: builtins.concatMap (a: if a.content ? ${cls} then [ (dungeon.content.classModule (r.argsOf u) a.content.${cls}) ] else [ ]) (r.defaultCl ++ r.userClosure u);
+      partsOf = cls: u: builtins.concatMap (a: if a.content ? ${cls} then [ (dungeon.content.classModule (r.argsOf u) a a.content.${cls}) ] else [ ]) (r.defaultCl ++ r.userClosure u);
       nest = path: v: inputs.nixpkgs.lib.setAttrByPath path v;
       one =
         cls: e:

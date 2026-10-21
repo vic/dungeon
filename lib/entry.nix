@@ -1,9 +1,9 @@
 dungeon:
 let
   # Only these leaves are captured; `den.users` etc. stay free for user-declared outer options.
-  leaves = [ "hosts" "aspects" "schema" "policies" "quirks" "classes" "homes" "default" "systems" ];
+  leaves = [ "hosts" "aspects" "schema" "policies" "quirks" "classes" "homes" "default" "systems" "config" ];
   # Each outer definition becomes one Gen module rooted at the leaf (design-den-option.md option A).
-  toModules = lib: leaf: map (d: if leaf == "aspects" || leaf == "default" then lower lib leaf d else { _file = d.file; ${leaf} = if leaf == "policies" && builtins.isAttrs d.value then builtins.mapAttrs (name: v: if v.__isPolicy or false then v else { __isPolicy = true; inherit name; fn = v; }) d.value else d.value; });
+  toModules = lib: leaf: map (d: if leaf == "aspects" || leaf == "default" then lower lib leaf d else { _file = d.file; ${if leaf == "config" then "denConfig" else leaf} = if leaf == "policies" && builtins.isAttrs d.value then builtins.mapAttrs (name: v: if v.__isPolicy or false then v else { __isPolicy = true; inherit name; fn = v; }) d.value else d.value; });
   # `config.den.<leaf>` reads back the world value (deadbugs 216 reads `ev.config.den.aspects.foo`); evalDen takes
   # the leaf's definitionsWithLocations (toModules), so the readback never feeds its own input.
   # definitionsWithLocations is reverse module order (nixpkgs); reversed back so Gen's merge sees the authored module order
@@ -110,7 +110,7 @@ let
                     # standalone-home-manager.mdx:184-186: `provides.<host>` on the user aspect, only this home's host
                     ++ lib.optionals (h.hostName != null && den.aspects ? ${base} && (den.aspects.${base}.provides or { }) ? ${h.hostName}) (cl den.aspects.${base}.provides.${h.hostName});
                 in
-                lib.concatMap (a: lib.optional (a.content ? homeManager) (dungeon.content.classModule args a.content.homeManager)) (
+                lib.concatMap (a: lib.optional (a.content ? homeManager) (dungeon.content.classModule args a a.content.homeManager)) (
                   dcl ++ scope ++ dungeon.routes dcl [ ] args (dcl ++ scope)
                 );
             })

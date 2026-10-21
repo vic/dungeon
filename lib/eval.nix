@@ -12,6 +12,8 @@ dungeon: {
         ] ++ denModules;
       };
       cfg = inner.config;
+      # den.config.classModuleCollisionPolicy: the global level, read by content.nix through the bound entity
+      global = cfg.denConfig.classModuleCollisionPolicy;
       aspects = builtins.mapAttrs (n: a: if cfg.policyRecs ? ${n} then a // { policies = cfg.policyRecs.${n}; } else a) (dungeon.view.mkAspects cfg);
       # callable aspects: `den.aspects.f arg` = the raw fn applied, as an inline aspect (rawFns are the inner, unwrapped eval)
       wrapped = builtins.mapAttrs (n: a: a // { __functor = _: arg: if cfg.rawFns ? ${n} then cfg.rawFns.${n} arg else dungeon.parametric.fixedTo arg a; }) aspects;
@@ -19,16 +21,17 @@ dungeon: {
         aspects = wrapped;
         rawAspects = aspects;
         inherit (cfg) schema policies quirks classes unregistered systems rawFns rawDefs;
+        config = cfg.denConfig;
         # home entity (reference/schema.mdx:219-235): name = registry key, userName/hostName parsed at `@`;
         # identity = gen-identity's one mint (gen-identity lib/default.nix:411) over registry key + system (entities.mdx:93).
         homes = builtins.mapAttrs (system: builtins.mapAttrs (name: h:
           let at = builtins.match "([^@]*)@(.*)" name; in
-          { inherit name system; userName = if at == null then name else builtins.elemAt at 0; hostName = if at == null then null else builtins.elemAt at 1; class = "homeManager"; collisionPolicy = cfg.schema.home.collisionPolicy or null; }
+          { inherit name system; userName = if at == null then name else builtins.elemAt at 0; hostName = if at == null then null else builtins.elemAt at 1; class = "homeManager"; collisionPolicy = cfg.schema.home.collisionPolicy or null; __classModuleCollisionPolicy = global; }
           // h // { id_hash = dungeon.gen.identity.hashIdentity "home" [ "name" "system" ] (l: { inherit name system; }.${l}); })) cfg.homes;
         # entity `aspect` = den.aspects.<name> (reference/schema.mdx:139,141); lazy: throws only when read
         # user aspect (reference/schema.mdx:185) applies where it exists; none = empty aspect. shortcut: `<user>@<host>` qualified aspect not merged yet.
         # collisionPolicy: entity value, else the kind level (reference/aspects.mdx:186-193)
-        hosts = builtins.mapAttrs (system: builtins.mapAttrs (n: h: h // { aspects = dungeon.entityAspects world cfg (h // { inherit system; }); collisionPolicy = h.collisionPolicy or cfg.schema.host.collisionPolicy or null; aspect = aspects.${n} or (throw "den: host `${n}` has no aspect"); users = builtins.mapAttrs (u: v: v // { collisionPolicy = v.collisionPolicy or cfg.schema.user.collisionPolicy or null; aspect = aspects.${u} or { name = u; provides = { }; includes = [ ]; }; }) (h.users or { }); })) cfg.hosts;
+        hosts = builtins.mapAttrs (system: builtins.mapAttrs (n: h: h // { aspects = dungeon.entityAspects world cfg (h // { inherit system; }); collisionPolicy = h.collisionPolicy or cfg.schema.host.collisionPolicy or null; __classModuleCollisionPolicy = global; aspect = aspects.${n} or (throw "den: host `${n}` has no aspect"); users = builtins.mapAttrs (u: v: v // { collisionPolicy = v.collisionPolicy or cfg.schema.user.collisionPolicy or null; __classModuleCollisionPolicy = global; aspect = aspects.${u} or { name = u; provides = { }; includes = [ ]; }; }) (h.users or { }); })) cfg.hosts;
         batteries.primary-user = aspects.primary-user;
         batteries.define-user = aspects.define-user;
         batteries.hostname = aspects.hostname;

@@ -136,7 +136,7 @@ dungeon: {
       os = host.class;
       nixosOf = nixosOver [ ];
       # `keys` of args shadow same-named module-system args (pipe.to data, content.nix classModuleOver)
-      nixosOver = keys: args: a: builtins.concatMap (k: if a.content ? ${k} then [ (dungeon.content.classModuleOver keys args a.content.${k}) ] else [ ]) [ os "os" ];
+      nixosOver = keys: args: a: builtins.concatMap (k: if a.content ? ${k} then [ (dungeon.content.classModuleOver keys args a a.content.${k}) ] else [ ]) [ os "os" ];
       userCands =
         m: u:
         let
@@ -222,7 +222,7 @@ dungeon: {
           # host-aspects re-resolves the host tree at the user scope: its quirk emissions join the user pool, thunks called with the
           # host scope's resolution-chain ctx (`chain`, e.g. a parent `environment`) besides { host, user } (reference/quirks.mdx:97-104)
           hmArgs = u: quirkArgsOf u (chain // argsOf u) (userClosure u ++ viaHost u);
-          hmOf = u: a: if a.content ? homeManager then [ (dungeon.content.classModule (hmArgs u) a.content.homeManager) ] else [ ];
+          hmOf = u: a: if a.content ? homeManager then [ (dungeon.content.classModule (hmArgs u) a a.content.homeManager) ] else [ ];
           # host-aspects opt-in: host closure parts not already in the user's closure
           viaHost = u: let uc = userClosure u; seen = map (b: b.name) (defaultCl ++ uc); in
             if builtins.elem "host-aspects" (map (b: b.name) uc) then builtins.filter (a: !(builtins.elem a.name seen)) hostBase else [ ];
@@ -243,7 +243,7 @@ dungeon: {
       classModulesWith =
         raw: cls:
         let
-          of = args: a: map (dungeon.content.classModule args) ((if a.content ? ${cls} then [ a.content.${cls} ] else [ ]) ++ raw a);
+          of = args: a: map (dungeon.content.classModule args a) ((if a.content ? ${cls} then [ a.content.${cls} ] else [ ]) ++ raw a);
         in
         builtins.concatMap (of { inherit host; }) (defaultCl ++ hostCl)
         ++ builtins.concatMap (u: builtins.concatMap (of (argsOf u)) (builtins.filter (a: !builtins.elem a.name (names tuCl)) (userClosure u))) users;
@@ -251,7 +251,7 @@ dungeon: {
       userClassModulesWith =
         raw: u: cls:
         let
-          of = a: map (dungeon.content.classModule (argsOf u)) ((if a.content ? ${cls} then [ a.content.${cls} ] else [ ]) ++ raw a);
+          of = a: map (dungeon.content.classModule (argsOf u) a) ((if a.content ? ${cls} then [ a.content.${cls} ] else [ ]) ++ raw a);
           hostScope = defaultCl ++ hostCl;
         in
         builtins.concatMap of (hostScope ++ builtins.filter (a: !builtins.elem a.name (names hostScope)) (userClosure u));
