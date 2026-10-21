@@ -155,6 +155,8 @@ dungeon: {
     in
     {
       inherit tree;
+      # the include element as written, per anon slot: an unregistered class is read from it by name (resolve.nix)
+      rawAnons = lib.concatMapAttrs (n: a: let at = n: a: builtins.listToAttrs (map (x: { name = anon n x.i; value = x.e; }) (inl a)) // lib.foldl' (acc: k: acc // at k.p k.v) { } (if builtins.isAttrs a then kidList n a else [ ]); in at n a) tree;
       # site -> sightings, merged across definitions by the `inlineSites` option (view.nix)
       sites = lib.zipAttrsWith (_: lib.concatLists) (lib.concatLists (lib.mapAttrsToList sitesAt tree));
       polIncs = lib.concatMapAttrs polsAt (lib.filterAttrs (_: v: builtins.isAttrs v || builtins.isFunction v) (if builtins.isAttrs raw then raw else { }));

@@ -187,6 +187,8 @@ dungeon: {
           options.unregistered = lib.mkOption { type = t.listOf t.str; default = [ ]; };
           # named inline include sightings by site (normalize.nix sitesAt), across every definition
           options.inlineSites = lib.mkOption { type = t.lazyAttrsOf (t.listOf t.raw); default = { }; };
+          # raw aspect definitions (and raw include elements) by aspect name: unregistered classes are read from here on request
+          options.rawDefs = lib.mkOption { type = t.lazyAttrsOf (t.listOf t.raw); default = { }; };
         };
     };
 }

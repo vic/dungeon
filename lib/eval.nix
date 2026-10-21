@@ -18,7 +18,7 @@ dungeon: {
       world = {
         aspects = wrapped;
         rawAspects = aspects;
-        inherit (cfg) schema policies quirks classes unregistered systems rawFns;
+        inherit (cfg) schema policies quirks classes unregistered systems rawFns rawDefs;
         # home entity (reference/schema.mdx:219-235): name = registry key, userName/hostName parsed at `@`;
         # identity = gen-identity's one mint (gen-identity lib/default.nix:411) over registry key + system (entities.mdx:93).
         homes = builtins.mapAttrs (system: builtins.mapAttrs (name: h:

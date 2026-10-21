@@ -65,7 +65,7 @@ dungeon: {
           funnyNames = aspect:
             let
               den = config._module.args.den;
-              mods = lib.concatMap (a: lib.optional (a.content ? funny) (dungeon.content.classModule { } a.content.funny)) (dungeon.closure den.aspects aspect);
+              mods = map (dungeon.content.classModule { }) (den.lib.aspects.resolve "funny" aspect).imports;
               names = lib.evalModules { modules = mods ++ [ { options.names = lib.mkOption { type = lib.types.listOf lib.types.str; default = [ ]; }; } ]; };
             in
             lib.sort (a: b: a < b) names.config.names;

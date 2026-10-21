@@ -35,6 +35,7 @@ let
         rawFns = lib.optionalAttrs (leaf == "aspects") (lib.filterAttrs (_: builtins.isFunction) d.value);
         aspectPolicies = lib.optionalAttrs (leaf == "aspects" || leaf == "default") n.polIncs;
         inlineSites = n.sites;
+        rawDefs = builtins.mapAttrs (_: v: [ v ]) ((if leaf == "default" then { default = d.value; } else d.value) // n.rawAnons);
         unregistered = dungeon.unregistered (dungeon.view.cnf0Of den) (if leaf == "default" then { default = d.value; } else d.value);
       };
   # built hosts whose intoAttr head is `o`

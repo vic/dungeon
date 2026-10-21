@@ -209,7 +209,7 @@ dungeon: {
         # policy.provide effects of the host scope and its custom child scopes (scopes.nix, gen-scope nta)
         ++ dungeon.scopes.delivered sch host (hostArgs mF) (schemaPols "host" ++ memPols mF host.name);
     in
-    {
+    rec {
       inherit userModules argsOf userClosure defaultCl modulesFor hostCl;
       # home-manager.users.<u> gets default's then the user closure's homeManager parts; HM nixos module once, only if some user opts in.
       hm =
@@ -234,10 +234,12 @@ dungeon: {
       # shortcut: a den.default route also fires per user scope; default fromClass content then lands twice, dedup with minted identity (D4).
       modules = modulesFor { };
       # policy.instantiate custom spec (reference/policies.mdx:162-172): class bucket of the host scope subtree (host, then users)
-      classModules =
-        cls:
+      classModules = classModulesWith (_: [ ]);
+      # `raw a`: class content the typed aspect does not carry (an undeclared class requested by name, resolve.nix rawClassOf)
+      classModulesWith =
+        raw: cls:
         let
-          of = args: a: if a.content ? ${cls} then [ (dungeon.content.classModule args a.content.${cls}) ] else [ ];
+          of = args: a: map (dungeon.content.classModule args) ((if a.content ? ${cls} then [ a.content.${cls} ] else [ ]) ++ raw a);
         in
         builtins.concatMap (of { inherit host; }) (defaultCl ++ hostCl)
         ++ builtins.concatMap (u: builtins.concatMap (of (argsOf u)) (builtins.filter (a: !builtins.elem a.name (names tuCl)) (userClosure u))) users;
